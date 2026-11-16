@@ -1,0 +1,3 @@
+- insert:
+    - id: dsh-langfuse-header-toggle
+      name: '@local/dsh-langfuse-header-toggle'
