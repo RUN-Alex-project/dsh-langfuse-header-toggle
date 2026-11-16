@@ -158,7 +158,7 @@ plugin_manager action=install_bundle target=<本仓库>
 | E 操作失败不假报成功 | ✅（离线单测） | `tests/bridge.test.mjs` 覆盖 `uploader_refused`、`state_not_confirmed`；前端把非确认结果归一为「状态未知」 |
 | F 上传器重载/插件卸载后的清理 | ✅ | 上传器重载后 `v18b`；卸载 Bundle 后控件消失 `v19/v23`；重装后恢复 `v20/v24` |
 | 快速连点不重复 | ✅ | `v21-doubleclick.png`：两次快速点击=一次开+一次关，日志无重复 `on`/`sent` |
-| 服务端入库确认 | ✅ | 三次 trace 均用 Langfuse 读接口按 traceId 查到，`userId=<工号>`、`sessionId` 匹配、`turn_number=2/3/2`、`voluntary_upload=true` |
+| 服务端入库确认 | ✅ | 三次 trace 均用 Langfuse 读接口按 traceId 查到，`userId=xxxxxxxx`、`sessionId` 匹配、`turn_number=2/3/2`、`voluntary_upload=true` |
 | **新会话复测（修复后，只在全新会话开启）** | ✅ | 新会话 `session-9162c50e…`：默认关 → 开启 → 进行中的 turn 1 按设计不上传 → 空闲后新 turn 2 上传（服务端可查 `langfuse-query-3.json`）→ 关闭；tooltip 显示“已确认接收 1 轮”。旧会话全程未被开启 |
 | 界面窄宽度 | ✅（右侧栏展开时实测简写标签） | `raw/v4-turn1-debug.png`（修复前）与 `v38`（修复后为「会话上传：关」） |
 | 开关提示隐私边界 | ✅ | `v8-tooltip-on.png`（修复前）、`v33/v38`（修复后深色 tooltip：目的地 Langfuse、发送统计、“开≠每次发送成功”） |
