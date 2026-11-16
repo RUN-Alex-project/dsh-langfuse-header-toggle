@@ -1,0 +1,9 @@
+node_modules/
+backups/
+verification/
+installation-receipt.json
+tests/run-*.txt
+tests/syntax-*.txt
+*.log
+.DS_Store
+Thumbs.db

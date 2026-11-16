@@ -1,0 +1,7 @@
+﻿{
+  "baseUrl": "http://your-langfuse-host:3012",
+  "publicKey": "pk-lf-REPLACE_ME",
+  "secretKey": "sk-lf-REPLACE_ME",
+  "userId": "j00000",
+  "maxChars": 20000
+}
