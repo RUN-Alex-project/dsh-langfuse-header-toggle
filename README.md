@@ -5,7 +5,7 @@ DeepSeek Harness（DSH）顶部栏的「**本会话上传到 Langfuse**」开关
 | 项目 | 值 |
 | --- | --- |
 | 插件包名 | `@local/dsh-langfuse-header-toggle` |
-| 版本 | 1.0.0 |
+| 版本 | 1.1.0 |
 | 目标 DSH | Desktop **0.2.2-rc.3**（profile `desktop`，`<DSH 安装目录>` 安装） |
 | 依赖的现有上传器 | `dsh-langfuse-voluntary` **1.0.1**（`%USERPROFILE%\.dsh\langfuse-voluntary\dsh-langfuse-voluntary-1.0.1.mjs`，**未做任何修改**） |
 | 安装方式 | 本地目录 Bundle，`plugin_manager` / 插件页「添加插件」，已热加载 |
@@ -97,7 +97,7 @@ DeepSeek Harness（DSH）顶部栏的「**本会话上传到 Langfuse**」开关
 6. **关闭即清理**：关闭会清空尚未提交的文本/轮次缓存并中止在途请求；已发送到服务端的数据无法撤回（tooltip 已说明）。
 7. **不落地待上传正文**：关闭期间不缓存对话正文，不在退出时补发，没有后台队列或自动重试。
 8. **前端无密钥**：浏览器只收到 `{enabled, ready, version, sent, failed, last}` 这类状态；真正上传仍由 Host 侧原上传器执行。
-9. **不新增控制端口**：开关的两个接口是 DSH 现有 `/api` 共享通道上的精确路由，复用 DSH 的 Host/Origin 校验和浏览器 Cookie 认证，且仅 owner Peer 可达。
+9. **不新增控制端口**：四个接口（state/set/scan/migrate）都是 DSH 现有 `/api` 共享通道上的精确路由，复用 DSH 的 Host/Origin 校验和浏览器 Cookie 认证，且仅 owner Peer 可达。
 10. **不改 token 口径、不改度量平台成员资料**：全部沿用现有上传器的逻辑。
 11. **开关不是「假开关」**：切换直接作用于上传器授权状态；关闭后上传器自己不再采集、不再发送。
 
