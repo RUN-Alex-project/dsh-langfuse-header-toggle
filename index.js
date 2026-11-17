@@ -1009,6 +1009,9 @@ const USER_ID_PATTERN = /^[a-z]((30|00|60)\d{6}|wx\d{6,})$/;
  * stale in-memory config as current. Replacing the Host module resets this
  * marker, which is acceptable because that reload is the same event that would
  * re-import the uploader.
+ *
+ * The marker is process-local and intentionally not persisted: a DSH restart
+ * re-imports both the Host plugin and the uploader, so it starts empty.
  */
 const configPendingReload = new Set();
 
