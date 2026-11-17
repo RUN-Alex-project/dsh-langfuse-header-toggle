@@ -38,6 +38,7 @@ window.__ModuleLoader__.load({
       set: 'api/dsh-langfuse-toggle/set',
       scan: 'api/dsh-langfuse-toggle/scan',
       migrate: 'api/dsh-langfuse-toggle/migrate',
+      config: 'api/dsh-langfuse-toggle/config',
     });
     /** Client locale namespace owned by this bundle. */
     const NS = 'langfuseUpload';
@@ -158,6 +159,65 @@ window.__ModuleLoader__.load({
       'panel.migration.configCreated': '已创建配置：{path}',
       'panel.migration.configMissing': '未迁移：缺少 config.json，请先把本机 Langfuse 配置放到该路径。',
       'panel.migration.closeHint': '按 Esc 或点击别处关闭',
+      'panel.config.title': 'Langfuse 连接配置',
+      'panel.config.desc': '安装后在这里填写连接信息并保存；配置 ≠ 开启上传，所有会话仍然默认关闭。',
+      'panel.config.loading': '正在读取配置…',
+      'panel.config.loadError': '读取配置失败：{error}',
+      'panel.config.path': '配置文件：{path}',
+      'panel.config.state.valid': '配置有效',
+      'panel.config.state.invalid': '配置缺失或无效',
+      'panel.config.state.ready': '上传器已读取配置',
+      'panel.config.state.pending': '上传器尚未读取该配置，重启 DSH 后生效。',
+      'panel.config.defaultOff': '默认关闭：保存配置不会开启任何会话的上传；需要上传时请按会话点开关。',
+      'panel.config.keys': '公钥：{public}；私钥：{secret}',
+      'panel.config.key.set': '已设置',
+      'panel.config.key.setHint': '已设置（{hint}）',
+      'panel.config.key.unset': '未设置',
+      'panel.config.field.baseUrl': 'Langfuse 地址',
+      'panel.config.field.publicKey': '公钥（publicKey）',
+      'panel.config.field.secretKey': '私钥（secretKey）',
+      'panel.config.field.userId': '工号（userId）',
+      'panel.config.field.maxChars': '单条文本上限（maxChars）',
+      'panel.config.placeholder.baseUrl': 'https://langfuse.example.com',
+      'panel.config.placeholder.publicKey.set': '已设置（{hint}），留空保持不变',
+      'panel.config.placeholder.publicKey.unset': '未设置，粘贴 pk-lf-… 开头的公钥',
+      'panel.config.placeholder.secretKey.set': '已设置，留空保持不变（不会回显）',
+      'panel.config.placeholder.secretKey.unset': '未设置，粘贴 sk-lf-… 开头的私钥',
+      'panel.config.placeholder.userId': '工号，如 j60000000',
+      'panel.config.placeholder.maxChars': '默认 20000',
+      'panel.config.hint': '浏览器不会回显已保存的密钥；密钥字段留空表示保持原值。',
+      'panel.config.save': '保存配置',
+      'panel.config.saving': '正在保存…',
+      'panel.config.saved': '已保存，仍默认关闭：配置不会开启任何会话的上传，需要时按会话点开关',
+      'panel.config.saveFailed': '保存失败：{error}',
+      'panel.config.uploader.title': '上传器',
+      'panel.config.uploader.installed': '上传器已安装',
+      'panel.config.uploader.missing': '上传器未安装',
+      'panel.config.uploader.active': '运行中',
+      'panel.config.uploader.inactive': '未运行',
+      'panel.config.uploader.install': '安装上传器',
+      'panel.config.uploader.installing': '正在安装：复制模块 → 写入 Loader 行…',
+      'panel.config.uploader.installedOk': '上传器已安装。',
+      'panel.config.uploader.restart': '上传器已写入，但还需要重启 DSH 才能加载。',
+      'panel.config.uploader.failed': '安装失败：{error}',
+      'panel.config.uploader.auto': '检测到原版自动采集行；请使用现有「迁移为自愿上传」流程，安装不会重复处理迁移。',
+      'panel.config.uploader.moduleMissing': '插件内置的上传器副本缺失，无法安装。',
+      'panel.config.reason.missing': '不能为空',
+      'panel.config.reason.unparsable': '不是合法 URL',
+      'panel.config.reason.not_http': '必须以 http:// 或 https:// 开头',
+      'panel.config.reason.has_credentials': '不能包含用户名或密码',
+      'panel.config.reason.not_origin': '必须是纯域名（不能带路径）',
+      'panel.config.reason.publicKey.prefix': '必须以 pk-lf- 开头',
+      'panel.config.reason.secretKey.prefix': '必须以 sk-lf- 开头',
+      'panel.config.reason.secretKey.required_for_new_host': '更换 Langfuse 地址后需要重新填写',
+      'panel.config.reason.userId.pattern': '格式不符合工号规则（如 j60000000）',
+      'panel.config.reason.maxChars.not_number': '必须是数字',
+      'panel.config.reason.maxChars.out_of_range': '必须是大于 0 的数字',
+      'panel.config.reason.generic': '格式不正确',
+      'panel.config.fieldError': '{field}：{reason}',
+      'panel.config.error.writeFailed': '无法写入配置文件，请检查目录权限。',
+      'panel.config.error.installFailed': '安装未完成：上传器模块或 Loader 行缺失。',
+      'panel.config.error.busy': '已有一次安装正在进行，请稍后再试。',
     };
 
     const EN = {
@@ -249,6 +309,65 @@ window.__ModuleLoader__.load({
       'panel.migration.configCreated': 'Config created: {path}',
       'panel.migration.configMissing': 'Not migrated: config.json is missing. Put this profile\'s Langfuse config there first.',
       'panel.migration.closeHint': 'Press Esc or click elsewhere to close',
+      'panel.config.title': 'Langfuse connection config',
+      'panel.config.desc': 'Fill in and save the connection details after installing. Config is not consent: every session stays off by default.',
+      'panel.config.loading': 'Reading the config…',
+      'panel.config.loadError': 'Could not read the config: {error}',
+      'panel.config.path': 'Config file: {path}',
+      'panel.config.state.valid': 'Config valid',
+      'panel.config.state.invalid': 'Config missing or invalid',
+      'panel.config.state.ready': 'Uploader loaded the config',
+      'panel.config.state.pending': 'The uploader has not loaded this config yet; restart DSH to apply it.',
+      'panel.config.defaultOff': 'Off by default: saving the config never enables uploads for any session. Use the per-session switch when needed.',
+      'panel.config.keys': 'Public key: {public}; secret key: {secret}',
+      'panel.config.key.set': 'set',
+      'panel.config.key.setHint': 'set ({hint})',
+      'panel.config.key.unset': 'not set',
+      'panel.config.field.baseUrl': 'Langfuse URL',
+      'panel.config.field.publicKey': 'Public key (publicKey)',
+      'panel.config.field.secretKey': 'Secret key (secretKey)',
+      'panel.config.field.userId': 'User ID (userId)',
+      'panel.config.field.maxChars': 'Max characters (maxChars)',
+      'panel.config.placeholder.baseUrl': 'https://langfuse.example.com',
+      'panel.config.placeholder.publicKey.set': 'Set ({hint}); leave blank to keep it',
+      'panel.config.placeholder.publicKey.unset': 'Not set; paste the pk-lf-… public key',
+      'panel.config.placeholder.secretKey.set': 'Set; leave blank to keep it (never echoed)',
+      'panel.config.placeholder.secretKey.unset': 'Not set; paste the sk-lf-… secret key',
+      'panel.config.placeholder.userId': 'Employee number, e.g. j60000000',
+      'panel.config.placeholder.maxChars': 'Default 20000',
+      'panel.config.hint': 'Saved keys are never echoed to the browser; a blank key field keeps the stored value.',
+      'panel.config.save': 'Save config',
+      'panel.config.saving': 'Saving…',
+      'panel.config.saved': 'Saved, still off by default: the config does not enable uploads for any session; use the per-session switch when needed',
+      'panel.config.saveFailed': 'Save failed: {error}',
+      'panel.config.uploader.title': 'Uploader',
+      'panel.config.uploader.installed': 'Uploader installed',
+      'panel.config.uploader.missing': 'Uploader not installed',
+      'panel.config.uploader.active': 'running',
+      'panel.config.uploader.inactive': 'not running',
+      'panel.config.uploader.install': 'Install uploader',
+      'panel.config.uploader.installing': 'Installing: copying the module → writing the Loader row…',
+      'panel.config.uploader.installedOk': 'The uploader is installed.',
+      'panel.config.uploader.restart': 'The uploader was written but a DSH restart is required to load it.',
+      'panel.config.uploader.failed': 'Install failed: {error}',
+      'panel.config.uploader.auto': 'An original automatic collector row is present; use the existing "Migrate to voluntary upload" flow. Install never performs that migration.',
+      'panel.config.uploader.moduleMissing': 'The bundled uploader copy is missing, so it cannot be installed.',
+      'panel.config.reason.missing': 'must not be empty',
+      'panel.config.reason.unparsable': 'is not a valid URL',
+      'panel.config.reason.not_http': 'must start with http:// or https://',
+      'panel.config.reason.has_credentials': 'must not contain a username or password',
+      'panel.config.reason.not_origin': 'must be a bare origin (no path)',
+      'panel.config.reason.publicKey.prefix': 'must start with pk-lf-',
+      'panel.config.reason.secretKey.prefix': 'must start with sk-lf-',
+      'panel.config.reason.secretKey.required_for_new_host': 'must be re-entered after changing the Langfuse address',
+      'panel.config.reason.userId.pattern': 'does not match the employee-number pattern (e.g. j60000000)',
+      'panel.config.reason.maxChars.not_number': 'must be a number',
+      'panel.config.reason.maxChars.out_of_range': 'must be greater than 0',
+      'panel.config.reason.generic': 'is not valid',
+      'panel.config.fieldError': '{field}: {reason}',
+      'panel.config.error.writeFailed': 'Could not write the config file; check the directory permissions.',
+      'panel.config.error.installFailed': 'Install did not finish: the uploader module or its Loader row is missing.',
+      'panel.config.error.busy': 'Another install is running; retry in a moment.',
     };
 
     const CSS = `
@@ -338,6 +457,18 @@ window.__ModuleLoader__.load({
 .lfh-panel-primary:hover{filter:brightness(1.05)}
 .lfh-panel-primary:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-focus-ring-color,#2f6fed)}
 .lfh-panel-primary[disabled]{opacity:.6;cursor:progress}
+.lfh-config{display:flex;flex-direction:column;gap:6px}
+.lfh-config-form{display:flex;flex-direction:column;gap:6px;margin-top:2px}
+.lfh-field{display:flex;flex-direction:column;gap:2px}
+.lfh-field-label{font-size:11px;font-weight:600;color:var(--dsw-alias-label-secondary,#5f6368)}
+.lfh-input{box-sizing:border-box;width:100%;padding:3px 6px;border-radius:6px;
+  border:1px solid var(--dsw-alias-border-l2,rgba(0,0,0,.14));
+  background:var(--dsw-alias-bg-base,#ffffff);color:var(--dsw-alias-label-primary,#1f2329);
+  font:inherit;font-size:12px;line-height:18px}
+.lfh-input:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-focus-ring-color,#2f6fed)}
+.lfh-input[aria-invalid="true"]{border-color:var(--dsw-alias-state-error-primary,#b3261e)}
+.lfh-input:disabled{opacity:.6}
+.lfh-field-error{color:var(--dsw-alias-state-error-primary,#b3261e);font-size:11px;line-height:16px}
 `;
 
     /**
@@ -457,6 +588,97 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Extract the redacted config status from a `/config` answer.
+     * `get` and `save` answer with `value`; `install` answers with `status`.
+     * @param {any} result - RPC result envelope.
+     * @returns {object | null} status object, or null when absent.
+     */
+    function configStatusOf(result) {
+      if (result === null || typeof result !== 'object' || result.ok !== true) return null;
+      const candidate = result.value ?? result.status;
+      return candidate !== null && typeof candidate === 'object' && !Array.isArray(candidate) ? candidate : null;
+    }
+
+    /**
+     * Build the controlled form state from a status snapshot. Key fields always
+     * start blank: the Host never sends key material back.
+     * @param {any} status - redacted config status.
+     * @returns {{ baseUrl: string, publicKey: string, secretKey: string, userId: string, maxChars: string }} form state.
+     */
+    function configFormFromStatus(status) {
+      const maxChars = status !== null && typeof status === 'object' && Number.isInteger(status.maxChars)
+        ? status.maxChars
+        : 20000;
+      return {
+        baseUrl: typeof status?.baseUrl === 'string' ? status.baseUrl : '',
+        publicKey: '',
+        secretKey: '',
+        userId: typeof status?.userId === 'string' ? status.userId : '',
+        maxChars: String(maxChars),
+      };
+    }
+
+    /**
+     * Localize one key-presence label.
+     * @param {Function} t - namespace translator.
+     * @param {boolean} set - whether the Host has a stored value.
+     * @param {string | null} hint - optional redacted hint.
+     * @returns {string} localized label.
+     */
+    function configKeyText(t, set, hint) {
+      if (set !== true) return t('panel.config.key.unset');
+      return typeof hint === 'string' && hint.length > 0
+        ? t('panel.config.key.setHint', { hint })
+        : t('panel.config.key.set');
+    }
+
+    /**
+     * Localize a field-scoped validation failure.
+     * @param {Function} t - namespace translator.
+     * @param {string | null} field - Host field id.
+     * @param {string} reason - Host reason code.
+     * @returns {string} "field: reason" sentence or a generic fallback.
+     */
+    function configFieldErrorText(t, field, reason) {
+      if (typeof field !== 'string' || field.length === 0) return t('panel.config.reason.generic');
+      const fieldKey = `panel.config.field.${field}`;
+      const fieldLabel = t(fieldKey);
+      const fieldText = typeof fieldLabel === 'string' && fieldLabel !== fieldKey ? fieldLabel : field;
+      let reasonText = t('panel.config.reason.generic');
+      if (typeof reason === 'string' && reason.length > 0) {
+        const specificKey = `panel.config.reason.${field}.${reason}`;
+        const specific = t(specificKey);
+        if (typeof specific === 'string' && specific !== specificKey) {
+          reasonText = specific;
+        } else {
+          const genericKey = `panel.config.reason.${reason}`;
+          const generic = t(genericKey);
+          if (typeof generic === 'string' && generic !== genericKey) reasonText = generic;
+        }
+      }
+      return t('panel.config.fieldError', { field: fieldText, reason: reasonText });
+    }
+
+    /**
+     * Localize one config/install failure code without exposing Host text.
+     * @param {Function} t - namespace translator.
+     * @param {string} code - stable failure code.
+     * @returns {string} localized reason.
+     */
+    function configErrorText(t, code) {
+      switch (code) {
+        case 'transport': return t('error.transport');
+        case 'auth': return t('error.auth');
+        case 'write_failed': return t('panel.config.error.writeFailed');
+        case 'module_missing': return t('panel.config.uploader.moduleMissing');
+        case 'auto_collector_present': return t('panel.config.uploader.auto');
+        case 'install_failed': return t('panel.config.error.installFailed');
+        case 'busy': return t('panel.config.error.busy');
+        default: return t('error.generic');
+      }
+    }
+
+    /**
      * One session's upload switch.
      *
      * @param {object} props - slot runtime props plus the registration inject face.
@@ -476,6 +698,12 @@ window.__ModuleLoader__.load({
       const [panelOpen, setPanelOpen] = React.useState(false);
       const [scan, setScan] = React.useState({ phase: 'idle', data: null, error: null });
       const [applyState, setApplyState] = React.useState({ phase: 'idle', error: null, result: null });
+      const [config, setConfig] = React.useState({ phase: 'idle', status: null, error: null });
+      const [configForm, setConfigForm] = React.useState({
+        baseUrl: '', publicKey: '', secretKey: '', userId: '', maxChars: '20000',
+      });
+      const [configSave, setConfigSave] = React.useState({ phase: 'idle', field: null, reason: null, error: null });
+      const [configInstall, setConfigInstall] = React.useState({ phase: 'idle', restartRequired: false, error: null });
       const panelRef = React.useRef(null);
       const rootRef = React.useRef(null);
       const gateRef = React.useRef(null);
@@ -637,11 +865,107 @@ window.__ModuleLoader__.load({
         }
       }, [t]);
 
+      /**
+       * Read the redacted connection-config status from the Host and reset the
+       * form. Runs only when the user opens the panel (or presses retry): the
+       * form must never expand or submit on page load.
+       * @returns {Promise<void>} resolves when the status settled.
+       */
+      const loadConfig = React.useCallback(async () => {
+        setConfig(current => ({ ...current, phase: 'loading', error: null }));
+        try {
+          const result = await postJson(ROUTES.config, { action: 'get' });
+          const status = configStatusOf(result);
+          if (status === null) {
+            setConfig({ phase: 'error', status: null, error: t('error.generic') });
+            return;
+          }
+          setConfig({ phase: 'ready', status, error: null });
+          setConfigForm(configFormFromStatus(status));
+        } catch (error) {
+          setConfig({ phase: 'error', status: null, error: errorText(failureDetail(error), t) });
+        }
+      }, [t]);
+
+      /**
+       * Save the form through `/config` with `action: "save"`. The Host owns
+       * validation; its field-scoped failure is rendered next to that input.
+       * @returns {Promise<void>} resolves when the save settled.
+       */
+      const saveConfigForm = React.useCallback(async () => {
+        if (configSave.phase === 'saving') return;
+        setConfigSave({ phase: 'saving', field: null, reason: null, error: null });
+        const payload = {
+          action: 'save',
+          baseUrl: configForm.baseUrl,
+          userId: configForm.userId,
+          maxChars: configForm.maxChars,
+        };
+        if (configForm.publicKey.trim().length > 0) payload.publicKey = configForm.publicKey.trim();
+        if (configForm.secretKey.trim().length > 0) payload.secretKey = configForm.secretKey.trim();
+        try {
+          const result = await postJson(ROUTES.config, payload);
+          if (result !== null && result.ok === true) {
+            const status = configStatusOf(result);
+            if (status !== null) {
+              setConfig({ phase: 'ready', status, error: null });
+              setConfigForm(configFormFromStatus(status));
+            }
+            setConfigSave({ phase: 'saved', field: null, reason: null, error: null });
+            void runScan();
+            return;
+          }
+          const error = result !== null && typeof result === 'object' ? result.error ?? {} : {};
+          setConfigSave({
+            phase: 'error',
+            field: typeof error.details?.field === 'string' ? error.details.field : null,
+            reason: typeof error.details?.reason === 'string' ? error.details.reason : '',
+            error: typeof error.code === 'string' ? error.code : 'generic',
+          });
+        } catch (caught) {
+          setConfigSave({ phase: 'error', field: null, reason: '', error: failureDetail(caught).error.code });
+        }
+      }, [configForm, configSave.phase, runScan]);
+
+      /**
+       * Install the vendored uploader and its Loader row through `/config` with
+       * `action: "install"`. Installing never enables any session.
+       * @returns {Promise<void>} resolves when the install settled.
+       */
+      const installConfigUploader = React.useCallback(async () => {
+        if (configInstall.phase === 'running') return;
+        setConfigInstall({ phase: 'running', restartRequired: false, error: null });
+        try {
+          const result = await postJson(ROUTES.config, { action: 'install' });
+          const status = configStatusOf(result);
+          if (status !== null) setConfig({ phase: 'ready', status, error: null });
+          if (result !== null && typeof result === 'object' && result.ok === true) {
+            setConfigInstall({ phase: 'done', restartRequired: result.restartRequired === true, error: null });
+            void runScan();
+            return;
+          }
+          const code = result !== null && typeof result === 'object' && typeof result.error?.code === 'string'
+            ? result.error.code
+            : 'generic';
+          setConfigInstall({ phase: 'error', restartRequired: false, error: code });
+        } catch (caught) {
+          setConfigInstall({ phase: 'error', restartRequired: false, error: failureDetail(caught).error.code });
+        }
+      }, [configInstall.phase, runScan]);
+
+      const refreshPanel = React.useCallback(() => {
+        void runScan();
+        void loadConfig();
+      }, [runScan, loadConfig]);
+
       const openPanel = React.useCallback(() => {
         setPanelOpen(true);
         setApplyState({ phase: 'idle', error: null, result: null });
+        setConfigSave({ phase: 'idle', field: null, reason: null, error: null });
+        setConfigInstall({ phase: 'idle', restartRequired: false, error: null });
         void runScan();
-      }, [runScan]);
+        void loadConfig();
+      }, [loadConfig, runScan]);
 
       React.useEffect(() => {
         if (!panelOpen) return undefined;
@@ -735,7 +1059,7 @@ window.__ModuleLoader__.load({
         panelBody.push(el('span', { key: 'scanError', className: 'lfh-panel-bad' },
           t('panel.scanError', { error: String(scan.error || '') })));
         panelBody.push(el('div', { key: 'scanRetry', className: 'lfh-panel-actions' },
-          el('button', { type: 'button', className: 'lfh-panel-btn', onClick: () => { void runScan(); } }, t('panel.refresh'))));
+          el('button', { type: 'button', className: 'lfh-panel-btn', onClick: refreshPanel }, t('panel.refresh'))));
       } else if (scan.phase === 'ready' && scan.data !== null) {
         const data = scan.data;
         const autoHooks = Array.isArray(data.auto) ? data.auto : [];
@@ -838,7 +1162,7 @@ window.__ModuleLoader__.load({
             panelBody.push(el('span', { key: 'migError', className: 'lfh-panel-bad' },
               t('panel.migration.failed', { error: String(applyState.error || '') })));
             panelBody.push(el('div', { key: 'migRetry', className: 'lfh-panel-actions' },
-              el('button', { type: 'button', className: 'lfh-panel-btn', onClick: () => { void runScan(); } }, t('panel.refresh'))));
+              el('button', { type: 'button', className: 'lfh-panel-btn', onClick: refreshPanel }, t('panel.refresh'))));
           } else if (applyState.phase === 'done') {
             const result = applyState.result ?? {};
             const status = String(result.status || '');
@@ -864,12 +1188,143 @@ window.__ModuleLoader__.load({
                 t('panel.migration.changed', { paths: changed.join(' ; ') })));
             }
             panelBody.push(el('div', { key: 'migAgain', className: 'lfh-panel-actions' },
-              el('button', { type: 'button', className: 'lfh-panel-btn', onClick: () => { void runScan(); } }, t('panel.refresh'))));
+              el('button', { type: 'button', className: 'lfh-panel-btn', onClick: refreshPanel }, t('panel.refresh'))));
           }
         } else if (data.migration?.reason === 'config_missing') {
           panelBody.push(el('div', { key: 'cfgWarn', className: 'lfh-panel-warn' }, t('panel.migration.configMissing')));
         }
       }
+      // Connection config editor. It is built here but only mounted while the
+      // panel is open, and the status query runs only from openPanel/retry, so
+      // the form never expands or submits on page load.
+      const configNodes = [];
+      configNodes.push(el('div', { key: 'cfgTitle', className: 'lfh-panel-section' }, t('panel.config.title')));
+      configNodes.push(el('span', { key: 'cfgDesc', className: 'lfh-panel-note' }, t('panel.config.desc')));
+      if (config.phase === 'loading' || config.phase === 'idle') {
+        configNodes.push(el('span', { key: 'cfgLoading', className: 'lfh-panel-note' }, t('panel.config.loading')));
+      } else if (config.phase === 'error') {
+        configNodes.push(el('span', { key: 'cfgLoadError', className: 'lfh-panel-bad' },
+          t('panel.config.loadError', { error: String(config.error || '') })));
+        configNodes.push(el('div', { key: 'cfgRetry', className: 'lfh-panel-actions' },
+          el('button', { type: 'button', className: 'lfh-panel-btn', onClick: () => { void loadConfig(); } }, t('panel.refresh'))));
+      } else if (config.status !== null) {
+        const status = config.status;
+        const uploader = status.uploader !== null && typeof status.uploader === 'object' ? status.uploader : {};
+        const installed = uploader.installed === true;
+        const saving = configSave.phase === 'saving';
+        configNodes.push(el('div', { key: 'cfgStateRow', className: 'lfh-panel-row' },
+          badge(t(status.valid === true ? 'panel.config.state.valid' : 'panel.config.state.invalid'), status.valid === true ? 'ok' : 'bad'),
+          status.ready === true ? badge(t('panel.config.state.ready'), 'ok') : null));
+        if (typeof status.path === 'string' && status.path.length > 0) {
+          configNodes.push(el('code', { key: 'cfgPath', className: 'lfh-panel-code' },
+            t('panel.config.path', { path: status.path })));
+        }
+        configNodes.push(el('span', { key: 'cfgKeys', className: 'lfh-panel-note' },
+          t('panel.config.keys', {
+            public: configKeyText(t, status.publicKeySet === true, status.publicKeyHint),
+            secret: configKeyText(t, status.secretKeySet === true, null),
+          })));
+        configNodes.push(el('span', { key: 'cfgDefaultOff', className: 'lfh-panel-note' }, t('panel.config.defaultOff')));
+        if (status.valid === true && status.ready !== true && installed) {
+          configNodes.push(el('span', { key: 'cfgPending', className: 'lfh-panel-note' }, t('panel.config.state.pending')));
+        }
+
+        configNodes.push(el('div', { key: 'upHead', className: 'lfh-panel-section' }, t('panel.config.uploader.title')));
+        configNodes.push(el('div', { key: 'upRow', className: 'lfh-panel-row' },
+          badge(t(installed ? 'panel.config.uploader.installed' : 'panel.config.uploader.missing'), installed ? 'ok' : 'bad'),
+          installed
+            ? badge(t(uploader.active === true ? 'panel.config.uploader.active' : 'panel.config.uploader.inactive'),
+              uploader.active === true ? 'ok' : 'warn')
+            : null));
+        if (!installed) {
+          if (configInstall.phase === 'running') {
+            configNodes.push(el('span', { key: 'upRunning', className: 'lfh-panel-note' }, t('panel.config.uploader.installing')));
+          } else {
+            configNodes.push(el('div', { key: 'upActions', className: 'lfh-panel-actions' },
+              el('button', { type: 'button', className: 'lfh-panel-primary', onClick: () => { void installConfigUploader(); } },
+                t('panel.config.uploader.install'))));
+          }
+        }
+        if (configInstall.phase === 'done' && installed) {
+          configNodes.push(el('span', {
+            key: 'upDone',
+            className: configInstall.restartRequired ? 'lfh-panel-warn' : 'lfh-panel-ok',
+          }, t(configInstall.restartRequired ? 'panel.config.uploader.restart' : 'panel.config.uploader.installedOk')));
+        } else if (configInstall.phase === 'error') {
+          configNodes.push(el('span', { key: 'upError', className: 'lfh-panel-bad' },
+            t('panel.config.uploader.failed', { error: configErrorText(t, String(configInstall.error || '')) })));
+        }
+
+        /**
+         * Render one labeled input and its field-scoped save error.
+         * @param {string} key - form field id.
+         * @param {{ type?: string, placeholder?: string, autoComplete?: string, min?: string, max?: string }} [options] - input overrides.
+         * @returns {any} React element.
+         */
+        const fieldNode = (key, options = {}) => {
+          const fieldError = configSave.phase === 'error' && configSave.field === key
+            ? configFieldErrorText(t, key, String(configSave.reason || ''))
+            : null;
+          const children = [
+            el('span', { key: `label-${key}`, className: 'lfh-field-label' }, t(`panel.config.field.${key}`)),
+            el('input', {
+              key: `input-${key}`,
+              id: `lfh-config-${key}`,
+              className: 'lfh-input',
+              type: options.type ?? 'text',
+              value: configForm[key],
+              placeholder: options.placeholder,
+              disabled: saving,
+              autoComplete: options.autoComplete ?? 'off',
+              spellCheck: false,
+              min: options.min,
+              max: options.max,
+              'aria-invalid': fieldError === null ? undefined : 'true',
+              onChange: event => {
+                const value = event.target.value;
+                setConfigForm(previous => ({ ...previous, [key]: value }));
+                setConfigSave(previous => (previous.phase === 'saving' || previous.phase === 'idle'
+                  ? previous
+                  : { phase: 'idle', field: null, reason: null, error: null }));
+              },
+            }),
+          ];
+          if (fieldError !== null) {
+            children.push(el('span', { key: `error-${key}`, className: 'lfh-field-error' }, fieldError));
+          }
+          return el('label', { key: `field-${key}`, className: 'lfh-field' }, ...children);
+        };
+        const publicPlaceholder = status.publicKeySet === true
+          ? t('panel.config.placeholder.publicKey.set', { hint: String(status.publicKeyHint || t('panel.config.key.set')) })
+          : t('panel.config.placeholder.publicKey.unset');
+        const secretPlaceholder = status.secretKeySet === true
+          ? t('panel.config.placeholder.secretKey.set')
+          : t('panel.config.placeholder.secretKey.unset');
+        configNodes.push(el('div', { key: 'cfgForm', className: 'lfh-config-form' },
+          fieldNode('baseUrl', { type: 'url', autoComplete: 'url', placeholder: t('panel.config.placeholder.baseUrl') }),
+          fieldNode('publicKey', { placeholder: publicPlaceholder }),
+          fieldNode('secretKey', { type: 'password', autoComplete: 'new-password', placeholder: secretPlaceholder }),
+          fieldNode('userId', { placeholder: t('panel.config.placeholder.userId') }),
+          fieldNode('maxChars', { type: 'number', min: '1', max: '20000', placeholder: t('panel.config.placeholder.maxChars') }),
+          el('span', { key: 'cfgHint', className: 'lfh-panel-note' }, t('panel.config.hint')),
+          el('div', { key: 'cfgActions', className: 'lfh-panel-actions' },
+            el('button', {
+              type: 'button',
+              className: 'lfh-panel-primary',
+              disabled: saving,
+              onClick: () => { void saveConfigForm(); },
+            }, t(saving ? 'panel.config.saving' : 'panel.config.save'))),
+          configSave.phase === 'saved'
+            ? el('div', { key: 'cfgSaved', className: 'lfh-panel-ok' }, t('panel.config.saved'))
+            : null,
+          configSave.phase === 'error' && configSave.field === null
+            ? el('span', { key: 'cfgSaveError', className: 'lfh-panel-bad' },
+              t('panel.config.saveFailed', { error: configErrorText(t, String(configSave.error || '')) }))
+            : null,
+        ));
+      }
+      panelBody.push(el('div', { key: 'configEntry', className: 'lfh-config' }, ...configNodes));
+
       panelBody.push(el('span', { key: 'closeHint', className: 'lfh-panel-note' }, t('panel.migration.closeHint')));
 
       return createElement(
@@ -966,7 +1421,7 @@ window.__ModuleLoader__.load({
                   el('button', {
                     type: 'button',
                     className: 'lfh-panel-btn',
-                    onClick: () => { void runScan(); },
+                    onClick: refreshPanel,
                     disabled: scan.phase === 'loading',
                   }, t('panel.refresh')),
                   el('button', {
@@ -1049,6 +1504,10 @@ window.__ModuleLoader__.load({
         UploadToggle,
         ROUTES,
         NS,
+        configStatusOf,
+        configFormFromStatus,
+        configFieldErrorText,
+        configErrorText,
       },
     };
   },

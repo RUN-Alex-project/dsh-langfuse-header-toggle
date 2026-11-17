@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Langfuse session upload switch",
-    "description": "Adds a switch beside the conversation title in the DSH header that turns the voluntary Langfuse upload on or off for the current session only. The switch shows the Host-confirmed state (on / off / unknown), refreshes on session change, and stays in sync with the existing /lf on, /lf off and /lf off-all commands. Only turns that start after enabling are uploaded; already-sent data cannot be withdrawn. New, forked and copied sessions always start disabled, and a DSH restart resets every session to disabled. The plugin never opens a new control port and never exposes the Langfuse keys to the browser: the Host-side uploader performs the upload."
+    "description": "Adds a switch beside the conversation title in the DSH header that turns the voluntary Langfuse upload on or off for the current session only. The switch shows the Host-confirmed state (on / off / unknown), refreshes on session change, and stays in sync with the existing /lf on, /lf off and /lf off-all commands. Only turns that start after enabling are uploaded; already-sent data cannot be withdrawn. New, forked and copied sessions always start disabled, and a DSH restart resets every session to disabled. Since 1.2.0 the same panel can edit the Langfuse connection config and install the uploader; saving the config never enables uploads for any session. The plugin never opens a new control port and never exposes the Langfuse keys to the browser: the Host-side uploader performs the upload."
   }
 }

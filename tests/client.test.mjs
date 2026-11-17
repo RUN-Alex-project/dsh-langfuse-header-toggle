@@ -113,6 +113,10 @@ test('apply registers the header cell and both locale dictionaries', async () =>
     assert.ok(dictionaries.zh['aria.switch'].includes('Langfuse'));
     assert.ok(dictionaries.zh.hint.includes('已上传内容无法撤回'));
     assert.ok(dictionaries.zh.hint.includes('Langfuse'), 'the tooltip names the destination');
+    assert.ok(dictionaries.zh['panel.config.saved'].includes('仍默认关闭'));
+    assert.ok(dictionaries.zh['panel.config.defaultOff'].includes('不会开启任何会话的上传'));
+    assert.equal(dictionaries.zh['panel.config.field.secretKey'], '私钥（secretKey）');
+    assert.ok(dictionaries.zh['panel.config.uploader.missing'].includes('未安装'));
     assert.deepEqual(Object.keys(dictionaries.zh).sort(), Object.keys(dictionaries.en).sort());
 
     injected = registration.inject();
@@ -230,6 +234,51 @@ test('errorText maps failure codes to localized copy', () => {
   assert.deepEqual(seen, ['error.uploader', 'error.session', 'error.unconfirmed', 'error.auth', 'error.generic', 'error.generic']);
   assert.equal(internals.ROUTES.state, 'api/dsh-langfuse-toggle/state');
   assert.equal(internals.ROUTES.set, 'api/dsh-langfuse-toggle/set');
+  assert.equal(internals.ROUTES.config, 'api/dsh-langfuse-toggle/config');
+});
+
+test('config helpers keep keys out of the form and localize field failures', () => {
+  const fromValue = internals.configStatusOf({ ok: true, value: { valid: true } });
+  const fromStatus = internals.configStatusOf({ ok: true, status: { valid: false } });
+  assert.equal(fromValue.valid, true);
+  assert.equal(fromStatus.valid, false);
+  assert.equal(internals.configStatusOf({ ok: false, error: {} }), null);
+
+  const form = internals.configFormFromStatus({
+    baseUrl: 'https://langfuse.example.com',
+    publicKeySet: true,
+    secretKeySet: true,
+    publicKeyHint: 'pk-lf-…1a2b',
+    userId: 'j60000000',
+    maxChars: 5000,
+  });
+  assert.deepEqual(form, {
+    baseUrl: 'https://langfuse.example.com',
+    publicKey: '',
+    secretKey: '',
+    userId: 'j60000000',
+    maxChars: '5000',
+  });
+
+  const ZH = {
+    'panel.config.field.baseUrl': 'Langfuse 地址',
+    'panel.config.reason.not_origin': '必须是纯域名（不能带路径）',
+    'panel.config.reason.generic': '格式不正确',
+    'panel.config.fieldError': '{field}：{reason}',
+    'panel.config.uploader.auto': '检测到原版自动采集行',
+    'panel.config.error.writeFailed': '无法写入配置文件',
+    'error.generic': '操作失败。',
+  };
+  const t = (key, params) => {
+    let text = ZH[key] ?? key;
+    for (const [name, value] of Object.entries(params ?? {})) text = text.replaceAll(`{${name}}`, String(value));
+    return text;
+  };
+  assert.equal(internals.configFieldErrorText(t, 'baseUrl', 'not_origin'), 'Langfuse 地址：必须是纯域名（不能带路径）');
+  assert.equal(internals.configFieldErrorText(t, 'baseUrl', 'unknown'), 'Langfuse 地址：格式不正确');
+  assert.equal(internals.configErrorText(t, 'auto_collector_present'), '检测到原版自动采集行');
+  assert.equal(internals.configErrorText(t, 'write_failed'), '无法写入配置文件');
+  assert.equal(internals.configErrorText(t, 'weird'), '操作失败。');
 });
 
 test('failureDetail distinguishes authentication from transport', () => {
