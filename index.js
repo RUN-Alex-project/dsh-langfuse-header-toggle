@@ -52,7 +52,7 @@ export const name = 'dsh-langfuse-header-toggle';
 export const VERSION = '1.1.0';
 
 /** Uploader version this bundle vendors for migration. */
-export const VENDORED_UPLOADER_VERSION = '1.0.1';
+export const VENDORED_UPLOADER_VERSION = '1.0.2';
 
 /** Loader row id used for the managed voluntary uploader entry. */
 export const VOLUNTARY_ROW_ID = 'dsh-langfuse-voluntary-1-0-1';
@@ -93,7 +93,7 @@ export const CLIENT_ROUTES = Object.freeze({
 /**
  * Uploader diagnostic slot. The voluntary uploader publishes
  * `{ controller, context, version }` under this registered symbol.
- * @see ~/.dsh/langfuse-voluntary/dsh-langfuse-voluntary-1.0.1.mjs
+ * @see ~/.dsh/langfuse-voluntary/dsh-langfuse-voluntary-1.0.2.mjs
  */
 export const UPLOADER_SYMBOL = Symbol.for('dsh.langfuse.voluntary');
 

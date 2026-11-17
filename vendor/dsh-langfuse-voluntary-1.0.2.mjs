@@ -10,7 +10,7 @@ import { execFileSync } from 'node:child_process';
 
 export const name = 'dsh-langfuse-voluntary';
 export const inject = ['commands'];
-export const VERSION = '1.0.1';
+export const VERSION = '1.0.2';
 const TRACE_NAME = 'DeepSeek Harness Agent Turn';
 const DIAGNOSTIC = Symbol.for('dsh.langfuse.voluntary');
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -214,7 +214,7 @@ export class VoluntaryCollector {
     if (state && state.session !== session) { this.#revoke(state); this.#states.delete(id); state = null; }
     if (!state) {
       state = { id, session, enabled: false, epoch: '', fromSeq: 0, turns: new Map(), pendingUser: '',
-        sentTurns: new Set(), requests: new Set(), sent: 0, failed: 0, last: null };
+        history: [], sentTurns: new Set(), requests: new Set(), sent: 0, failed: 0, last: null };
       this.#states.set(id, state);
     }
     return state;
@@ -222,14 +222,22 @@ export class VoluntaryCollector {
   #revoke(state) {
     state.enabled = false;
     state.epoch = crypto.randomUUID();
-    state.turns.clear(); state.pendingUser = '';
+    state.turns.clear(); state.pendingUser = ''; state.history = [];
     for (const request of state.requests) request.abort();
     state.requests.clear();
   }
   command(invocation) {
     if (this.#disposed) return { kind: 'error', text: '上传控制器已卸载，当前未开启上传。' };
     const session = invocation?.agent?.session;
-    const action = String(invocation?.rawInput || '').trim().toLowerCase() || 'status';
+    const rawInput = String(invocation?.rawInput || '').trim();
+    const tokens = rawInput.toLowerCase().split(/\s+/).filter(Boolean);
+    const action = tokens[0] || 'status';
+    const flags = tokens.slice(1);
+    const historyFlag = flags.some(flag => ['--history', 'history', '--backfill', 'backfill'].includes(flag));
+    const unknownFlags = flags.filter(flag => !['--history', 'history', '--backfill', 'backfill'].includes(flag));
+    if (unknownFlags.length > 0 || (flags.length > 0 && action !== 'on')) {
+      return { kind: 'error', text: '用法：/lf on [--history] | /lf off | /lf status | /lf off-all' };
+    }
     if (!sid(session)) return { kind: 'error', text: '无法确定当前会话，未开启上传。' };
     if (action === 'off-all') {
       for (const state of this.#states.values()) this.#revoke(state);
@@ -239,14 +247,24 @@ export class VoluntaryCollector {
     const state = this.#state(session);
     if (action === 'on') {
       if (!this.#config) return { kind: 'error', text: '上传器配置尚未就绪，仍保持关闭。' };
-      if (state.enabled) return { kind: 'success', text: `当前会话已开启上传：${state.id}；保留原有开启起点。` };
+      if (state.enabled) return { kind: 'success', text: `当前会话已开启上传：${state.id}；保留原有开启起点。如需补传历史，请先 /lf off 再 /lf on --history。` };
       if (!Number.isSafeInteger(session.seq) || session.seq < 0) return { kind: 'error', text: '无法确定会话事件起点，仍保持关闭。' };
       const selection = invocation.agent?.model?.current?.();
       state.defaultModel = selection?.model || invocation.agent?.options?.model || '';
       state.enabled = true; state.epoch = crypto.randomUUID(); state.fromSeq = session.seq;
-      state.turns.clear(); state.pendingUser = '';
+      state.turns.clear(); state.pendingUser = ''; state.history = [];
       state.enabledAt = new Date().toISOString();
-      this.#audit({ event: 'on', sessionId: state.id, fromSeq: state.fromSeq });
+      if (historyFlag) {
+        state.history = this.#stageHistory(state, session);
+        this.#audit({ event: 'history-staged', sessionId: state.id, fromSeq: state.fromSeq, turns: state.history.length });
+      }
+      this.#audit({ event: 'on', sessionId: state.id, fromSeq: state.fromSeq, history: state.history.length });
+      if (historyFlag) {
+        return {
+          kind: 'success',
+          text: `已开启当前会话上传：${state.id}\n将在下一条消息开始时补传此前 ${state.history.length} 个历史轮次；补传内容同样无法撤回。\n工号：${this.#config.userId}`,
+        };
+      }
       return { kind: 'success', text: `已开启当前会话上传：${state.id}\n仅上传此后新开始的轮次；历史内容与其他会话保持关闭。\n工号：${this.#config.userId}` };
     }
     if (action === 'off') {
@@ -254,15 +272,89 @@ export class VoluntaryCollector {
       this.#audit({ event: 'off', sessionId: state.id });
       return { kind: 'success', text: `已关闭当前会话上传：${state.id}\n尚未提交的缓存已清除；已发送的数据无法撤回。` };
     }
-    if (action !== 'status') return { kind: 'error', text: '用法：/lf on | /lf off | /lf status | /lf off-all' };
+    if (action !== 'status') return { kind: 'error', text: '用法：/lf on [--history] | /lf off | /lf status | /lf off-all' };
     const last = state.last ? `${state.last.at} ${state.last.ok ? '平台 HTTP 已接收' : '发送未完成：' + state.last.error}${state.last.traceId ? '；trace=' + state.last.traceId : ''}` : '尚无发送';
     return { kind: 'success', text: [
       `当前会话：${state.id}`, `Langfuse 上传：${state.enabled ? '开启' : '关闭（默认）'}`,
       `上传器：${this.#config ? '已配置，工号 ' + this.#config.userId : '未配置'}`,
+      `历史补传：${state.history?.length ? '待补传 ' + state.history.length + ' 轮（下一条消息开始时上传）' : '无'}`,
       `本次进程已接收确认：${state.sent} 轮；失败：${state.failed} 轮`,
       `待完成轮次：${state.turns.size}；发送中：${state.requests.size}`,
       `最近结果：${last}`, '其他会话独立控制；DSH 重启后全部恢复关闭。',
     ].join('\n') };
+  }
+  #stageHistory(state, session) {
+    if (!this.#config) return [];
+    let events = [];
+    try {
+      if (typeof session.snapshotEvents === 'function') events = session.snapshotEvents(0, state.fromSeq);
+      else if (typeof session.ownEvents === 'function') events = session.ownEvents();
+    } catch { events = []; }
+    const history = [];
+    const allowed = ['turn/start', 'turn/end', 'user/message', 'assistant/message', 'tool/call', 'tool/result', 'request/header'];
+    let pendingUser = '';
+    let current = null;
+    for (const event of events) {
+      if (!event || typeof event.type !== 'string') continue;
+      if (Number.isSafeInteger(event.seq) && event.seq >= state.fromSeq) continue;
+      const type = event.type;
+      if (!allowed.includes(type)) continue;
+      const data = event.data || {};
+      const turn = Number(data.turn);
+      if (type === 'turn/start') {
+        if (!Number.isSafeInteger(turn) || turn <= 0 || state.sentTurns.has(turn)) { current = null; pendingUser = ''; continue; }
+        current = { turn, epoch: state.epoch, start: iso(event.time), userText: pendingUser,
+          model: state.defaultModel || '', generations: new Map(), tools: new Map(), reason: '' };
+        pendingUser = '';
+        continue;
+      }
+      if (type === 'user/message') {
+        if (data.source?.kind && !['user', 'human'].includes(data.source.kind)) continue;
+        const content = text(data.message || data, this.#config.maxChars);
+        if (!content) continue;
+        if (current && !current.userText) current.userText = content;
+        else if (!current && !pendingUser) pendingUser = content;
+        continue;
+      }
+      if (type === 'request/header') {
+        const model = data.header?.config?.model;
+        if (typeof model === 'string' && model && current) current.model = model;
+        continue;
+      }
+      if (!current) continue;
+      if (type === 'assistant/message') {
+        const step = Number.isSafeInteger(data.step) ? data.step : current.generations.size;
+        current.generations.set(step, { step, start: current.start, end: iso(event.time),
+          message: text(data.message || data, this.#config.maxChars), usage: data.usage || {},
+          model: data.message?.model || data.model || current.model || '' });
+      } else if (type === 'tool/call') {
+        const callId = String(data.callId || data.call_id || 'tool-' + current.tools.size);
+        current.tools.set(callId, { id: callId, name: String(data.name || ''),
+          arguments: text(typeof data.arguments === 'string' ? data.arguments : safeJson(data.arguments), this.#config.maxChars),
+          start: iso(event.time) });
+      } else if (type === 'tool/result') {
+        const callId = String(data.callId || data.call_id || data.message?.callId || '');
+        const tool = current.tools.get(callId);
+        if (tool) { tool.result = text(data.message || data, this.#config.maxChars); tool.end = iso(event.time); }
+      } else if (type === 'turn/end') {
+        current.end = iso(event.time);
+        current.reason = typeof data.reason === 'object' ? data.reason?.kind || '' : String(data.reason || '');
+        if (current.generations.size > 0 || current.tools.size > 0) history.push(current);
+        current = null;
+      }
+    }
+    return history;
+  }
+  #flushHistory(state) {
+    const staged = Array.isArray(state.history) ? state.history : [];
+    if (staged.length === 0) return;
+    state.history = [];
+    for (const buffer of staged) {
+      buffer.epoch = state.epoch;
+      const task = this.#send(state, buffer);
+      this.#tasks.add(task);
+      task.finally(() => this.#tasks.delete(task));
+    }
   }
   handle(session, event) {
     if (this.#disposed) return;
@@ -280,6 +372,7 @@ export class VoluntaryCollector {
       state.turns.set(turn, { turn, epoch: state.epoch, start: iso(event.time), userText: state.pendingUser,
         model: state.defaultModel || '', generations: new Map(), tools: new Map(), reason: '' });
       state.pendingUser = '';
+      this.#flushHistory(state);
       return;
     }
     if (type === 'user/message') {
@@ -357,7 +450,7 @@ export class VoluntaryCollector {
   diagnostics() {
     return { version: VERSION, defaultUpload: false, ready: !!this.#config,
       endpoint: this.#config?.baseUrl, userId: this.#config?.userId,
-      sessions: [...this.#states.values()].map(state => ({ id: state.id, enabled: state.enabled, fromSeq: state.fromSeq, sent: state.sent, failed: state.failed, last: state.last })) };
+      sessions: [...this.#states.values()].map(state => ({ id: state.id, enabled: state.enabled, fromSeq: state.fromSeq, sent: state.sent, failed: state.failed, historyStaged: state.history?.length ?? 0, last: state.last })) };
   }
 }
 
@@ -389,7 +482,7 @@ export function apply(ctx) {
     };
     yield ctx.commands.register({
       name: 'lf', description: '自愿上传当前会话到团队 Langfuse（默认关闭）',
-      input: { hint: 'on | off | status | off-all' },
+      input: { hint: 'on [--history] | off | status | off-all' },
       handler: invocation => controller.command(invocation),
     });
   }, 'langfuse voluntary controls');
