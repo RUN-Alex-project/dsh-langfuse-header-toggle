@@ -7,7 +7,7 @@ DeepSeek Harness（DSH）顶部栏的「**本会话上传到 Langfuse**」开关
 | 插件包名 | `@local/dsh-langfuse-header-toggle` |
 | 版本 | 1.1.0 |
 | 目标 DSH | Desktop **0.2.2-rc.3**（profile `desktop`，`<DSH 安装目录>` 安装） |
-| 依赖的现有上传器 | `dsh-langfuse-voluntary` **1.0.1**（`%USERPROFILE%\.dsh\langfuse-voluntary\dsh-langfuse-voluntary-1.0.1.mjs`，**未做任何修改**） |
+| 依赖的现有上传器 | `dsh-langfuse-voluntary` **1.0.2**（`%USERPROFILE%\.dsh\langfuse-voluntary\dsh-langfuse-voluntary-1.0.2.mjs`；在 1.0.1 基础上新增 `/lf on --history`，采集/上传逻辑未变） |
 | 安装方式 | 本地目录 Bundle，`plugin_manager` / 插件页「添加插件」，已热加载 |
 | 安装位置 | 本目录（`...\outputs\dsh-langfuse-header-toggle`），以 `link:` 方式挂进 desktop profile |
 | 安装日期 | 2026-11-16 |
@@ -76,6 +76,7 @@ DeepSeek Harness（DSH）顶部栏的「**本会话上传到 Langfuse**」开关
 | 输入 `/lf on` | 4 秒内自动变为「开」 | 仅当前会话开启 |
 | 输入 `/lf off` | 自动变为「关」 | 当前会话关闭并清空未提交缓存 |
 | 输入 `/lf off-all` | 已挂载的页头自动变为「关」 | 进程内全部会话关闭 |
+| 输入 `/lf on --history` | 4 秒内自动变为「开」，并在下一条消息时补传历史 | 仅当前会话，见 2.2 |
 | 点击开关 | 直接调用确定的后端能力（不经过模型推理，不消耗模型调用） | 与命令完全一致 |
 
 ## 2.1 对话进行中点击开关，会上传吗？
@@ -84,8 +85,25 @@ DeepSeek Harness（DSH）顶部栏的「**本会话上传到 Langfuse**」开关
 
 - **在某一轮进行中点“开”**：上传器在开启瞬间记录会话当前事件位置（`fromSeq`），只对这个位置之后**新开始**的轮次建立缓冲。正在进行的这一轮，其 `turn/start` 早于该位置，整轮被跳过，结束后也不会补传。（已在验证中实测：新会话 turn 1 运行中开启，turn 1 结束后审计日志无 `sent`；随后新 turn 2 才上传。）
 - **在某一轮进行中点“关”**：该轮若是在开启之后才开始的，尚未提交的内容会被清空、在途请求会被尝试中止，不会上传；但若数据**已经被服务端接收**，则无法撤回（这也是详情卡片里写明“已上传内容无法撤回”的原因）。
-- **历史内容**：任何情况下都不扫描、不补传开启前的历史轮次。
+- **历史内容**：默认不扫描、不补传开启前的历史轮次；如需显式补传，见 2.2 的 `/lf on --history`。
 - 极端并发时序（轮次恰好在同一瞬间结束并发起上传）可能同时发生，实际以 `control-events.jsonl` 的 `sent/failed` 为准；正常手动点击不会撞上这个窗口。
+
+## 2.2 补传开启前的历史：`/lf on --history`
+
+默认行为不变：`/lf on` 只上传此后新开始的轮次，历史内容不扫描、不补传。
+
+如果确实需要把「开启前已完成的对话」一起上传，用显式命令：
+
+```
+/lf on --history
+```
+
+- 开启瞬间读取本会话**已完成**的历史轮次（正在进行的轮次不算），暂存待传；
+- **下一条消息开始时**触发补传：每个历史轮次生成一个 trace，然后当前这条消息照常上传；
+- 命令返回会写明「将在下一条消息开始时补传此前 N 个历史轮次」；`/lf status` 显示「历史补传：待补传 N 轮」；
+- `/lf off`、`/lf off-all` 或上传器重载会清空待补传内容；
+- 只对当前会话生效；历史内容一旦发送无法撤回；
+- 普通 `/lf on` 不会暂存任何历史。
 
 ## 3. 隐私与授权边界（实现方式即保证）
 
@@ -93,7 +111,7 @@ DeepSeek Harness（DSH）顶部栏的「**本会话上传到 Langfuse**」开关
 2. **仅当前会话**：状态按精确 `sessionId` 读写；A 开启不影响 B，切到 B 也不会自动关闭 A。
 3. **新会话 / 派生 / fork 不继承**：上传器状态以会话 id 为键，全新 id 从关开始；桥接层只接受 `ctx.sessions` 中真实存在的活动会话。
 4. **重启 / 上传器重载后全部关闭**：授权只存在进程内存；实测上传器插件重载后页头恢复「关」。
-5. **只上传开启后新开始的轮次**：开启时由上传器记录当时的事件 `seq`；开启前已存在或正在进行中的轮次不会补传，也不扫描历史日志。
+5. **默认只上传开启后新开始的轮次**：开启时由上传器记录当时的事件 `seq`；默认不扫描、不补传历史。唯一例外是显式执行 `/lf on --history`：只暂存开启前已完成的轮次，并在下一条消息开始时补传（见 2.2）；进行中的轮次、其它会话、未开启时的内容都不会被读取。
 6. **关闭即清理**：关闭会清空尚未提交的文本/轮次缓存并中止在途请求；已发送到服务端的数据无法撤回（tooltip 已说明）。
 7. **不落地待上传正文**：关闭期间不缓存对话正文，不在退出时补发，没有后台队列或自动重试。
 8. **前端无密钥**：浏览器只收到 `{enabled, ready, version, sent, failed, last}` 这类状态；真正上传仍由 Host 侧原上传器执行。
@@ -118,7 +136,7 @@ DSH Host（index.js，Cordis 插件）
             ├─ scan：ctx.loader.entries() 枚举上传钩子 + 文件存在性 + 运行时诊断符号（只读）
             └─ migrate：备份 → 移除原版采集行 → 写入自愿行管理块 → 等待加载 → 报告是否需重启
                                    │
-现有上传器 dsh-langfuse-voluntary 1.0.1（未修改）
+现有上传器 dsh-langfuse-voluntary 1.0.2（1.0.1 + `/lf on --history`；采集/上传逻辑未变）
        └─ 原有采集/缓存/OTLP 上传/`/lf` 命令/`off-all`/审计日志
 ```
 
@@ -129,7 +147,7 @@ DSH Host（index.js，Cordis 插件）
 
 ## 5. 安装
 
-前提：DSH Desktop 0.2.2-rc.3 正在运行。若机器上已有 `dsh-langfuse-voluntary` 1.0.1 并 active，开关装好即可用；若还是原版自动采集，装好本插件后按 1.1 节的面板迁移（可自动从 `LANGFUSE_*` 环境变量生成配置）。
+前提：DSH Desktop 0.2.2-rc.3 正在运行。若机器上已有 `dsh-langfuse-voluntary` 1.0.2 并 active，开关装好即可用；若还是原版自动采集，装好本插件后按 1.1 节的面板迁移（可自动从 `LANGFUSE_*` 环境变量生成配置）。
 
 方式 A（界面）：**插件 → 添加插件 → 本地目录**，选择本目录。
 方式 B（命令）：
@@ -165,6 +183,7 @@ plugin_manager action=install_bundle target=<本仓库>
 | 开关操作不消耗模型调用 | ✅ | 切换前后会话「轮/步」与 token 统计不变，日志也无模型请求 |
 | 上传钩子扫描面板 | ✅ | `v52-panel-open.png`、`v53-panel-fixed.png`：每次打开重新扫描，显示「可控 / 自愿上传 / 运行中 / 有开关」、DSH 0.2.2-rc.3 · profile desktop、config.json 已就绪；打开面板不影响开关状态（日志无变化） |
 | 迁移为自愿上传 | ✅（离线单测）/ 未实机执行 | `tests/migration.test.mjs`（12 项）：分类、行移除、管理块幂等、裸 `[]` 处理、保留无关行、未确认拒绝、缺 config 且无 env 时拒绝、临时 profile 端到端写入、环境变量生成 `config.json`、扫描不泄露密钥；本机已是自愿版，没有在真实 profile 上执行破坏性迁移 |
+| `/lf on --history` 历史补传 | ✅（离线集成 3/3）/ 真实会话“暂存”已验证，“发送”未实测 | `tests/uploader-history.test.mjs`：真实上传器模块 + 本地 OTLP sink，暂存 2 个历史轮次，下一条消息后产生 3 个 trace（turn 1/2/3）内容正确且只发一次；普通 `on` 不发历史；非法参数拒绝。真实 DSH 审计日志有 `history-staged turns:2` |
 
 **测试会话与上传记录**：
 - 早期验收会话 `Greeting` / `session-e924eddc-…`：上传 turn 2（我的 `ok`）与 turn 3（验证期间你输入的一句话），turn 1 未上传。
@@ -186,6 +205,8 @@ plugin_manager action=install_bundle target=<本仓库>
 10. **原版自动采集的实机扫描未验证**：本机只装了自愿版，面板里「自动采集」分类与实际迁移按钮的实机呈现没有触发过；分类、计划与守卫由 `tests/migration.test.mjs` 覆盖。
 11. **迁移「应用」没有在真实 profile 上执行**（本机已是自愿版）：写入前备份、幂等管理块、缺配置拒绝、残留行拒绝、8 秒加载检测、重启提示都已实现并单测，但破坏性实操建议先在测试机/测试 profile 上演练。
 12. 扫描只覆盖 **DSH Loader 行**；Codex 等 DSH 之外的上报 hook（如原版包里的 Python hook）不会被发现或处理，面板结论仅针对 DSH。
+
+13. **`/lf on --history` 的真实会话补传发送未完成实测**：离线集成测试已验证「暂存 → 下一条消息 → 3 个 trace」；真实 DSH 里只观察到 `history-staged turns:2` 的审计记录，下一条消息触发补传的完整链路尚未在真实会话中跑完（测试被模型报错打断）。建议先按 2.2 手动验证一次。
 
 ## 8. 停用与回滚
 
@@ -210,7 +231,7 @@ plugin_manager action=remove_bundle target=@local/dsh-langfuse-header-toggle
 - 自动：执行上面的 `remove_bundle`，等价于撤销这两处变更；
 - 手动（仅在上一步不可用时）：从 `package.json` 删除 `@local/dsh-langfuse-header-toggle` 对应的 bundles 行与 dependency 行，然后在该 profile 目录执行 `pnpm install`（或恢复备份中的 `pnpm-lock.yaml`）。
 - **不要用整份旧 `cordis.patch.yml` 或旧 `package.json` 覆盖当前文件**——那会丢掉你之后新增的模型/插件设置。本次安装已把 `cordis.patch.yml` 恢复到与安装前**逐字节一致**（sha256 `036ba70b…`）。
-- 上传器（`%USERPROFILE%\.dsh\langfuse-voluntary\*`）**没有被修改**：插件文件哈希 `19ca60d2…`、`config.json` 均保持原值，无需回滚。
+- 上传器已从 1.0.1 升级为 **1.0.2**（新增 `/lf on --history`，采集/上传逻辑未变）：`%USERPROFILE%\.dsh\langfuse-voluntary\dsh-langfuse-voluntary-1.0.2.mjs`，sha256 `01c9b906…`；旧 1.0.1 文件保留未加载，需要回退时把 profile patch 中该行的 name 改回 1.0.1 并重载；`config.json` 未被修改。
 
 ### 撤销一次「迁移为自愿上传」
 若在面板里点过「应用」：
@@ -229,7 +250,7 @@ plugin_manager action=remove_bundle target=@local/dsh-langfuse-header-toggle
 | `cordis.patch.yml` | Host 行插入：`id: dsh-langfuse-header-toggle` |
 | `index.js` | Host：四条认证 `/api` 路由（state/set/scan/migrate）+ 扫描与迁移实现 + 卸载清理；无采集/上传逻辑 |
 | `client.js` | 浏览器端：开关组件 + 上传钩子扫描面板（每次打开重新扫描）、竞态门、tooltip、无障碍、窄宽简写 |
-| `vendor/dsh-langfuse-voluntary-1.0.1.mjs` | 迁移时使用的自愿上传器副本（与已安装文件的 sha256 一致；仅在目标目录缺失时复制） |
+| `vendor/dsh-langfuse-voluntary-1.0.2.mjs` | 迁移时使用的自愿上传器副本（与已安装 1.0.2 一致；仅在目标目录缺失时复制） |
 | `vendor/config.example.json` | 配置模板（占位符，无真实密钥），说明字段与放置位置 |
 | `locale/en.json`, `locale/zh.json` | 插件管理器里显示的标题/描述 |
 | `icon.svg` | 插件图标 |
@@ -237,6 +258,7 @@ plugin_manager action=remove_bundle target=@local/dsh-langfuse-header-toggle
 | `tests/client.test.mjs` | 客户端注册、竞态门、结果归一、请求形态测试（9 项） |
 | `tests/client-structure.test.mjs` | 左右分离结构/行为测试（4 项） |
 | `tests/migration.test.mjs` | 上传钩子分类、patch 行移除/管理块、迁移守卫、环境变量生成配置与临时 profile 端到端测试（12 项） |
+| `tests/uploader-history.test.mjs` | 上传器 `/lf on --history` 历史补传集成测试（3 项，使用真实上传器模块与本地 OTLP sink） |
 | `verification/` | 本地验证记录（截图/日志/查询结果，含会话内容，**不随仓库发布**） |
 | `backups/` | 本地安装前 profile 备份（**不随仓库发布**） |
 
@@ -249,15 +271,18 @@ plugin_manager action=remove_bundle target=@local/dsh-langfuse-header-toggle
 node --check index.js
 node --check client.js
 
-# 离线测试（33 项：桥接 8 + 客户端 9 + 控件结构 4 + 迁移 12）
+# 离线测试（36 项：桥接 8 + 客户端 9 + 控件结构 4 + 迁移 12 + 上传器历史 3）
 node tests/bridge.test.mjs
 node tests/client.test.mjs
 node tests/client-structure.test.mjs
 node tests/migration.test.mjs
+node tests/uploader-history.test.mjs
 
-# 可选：真实上传器集成测试会读取已安装的 1.0.1 上传器（只读导入）
-$env:DSH_LANGFUSE_UPLOADER = '%USERPROFILE%\.dsh\langfuse-voluntary\dsh-langfuse-voluntary-1.0.1.mjs'
+# 可选：真实上传器集成测试会读取已安装的 1.0.2 上传器（只读导入）
+$env:DSH_LANGFUSE_UPLOADER = '%USERPROFILE%\.dsh\langfuse-voluntary\dsh-langfuse-voluntary-1.0.2.mjs'
 node tests/bridge.test.mjs
+$env:LANGFUSE_UPLOADER_PATH = '%USERPROFILE%\.dsh\langfuse-voluntary\dsh-langfuse-voluntary-1.0.2.mjs'
+node tests/uploader-history.test.mjs
 ```
 
 Host 接口（安装后）：
@@ -276,3 +301,5 @@ Host 接口（安装后）：
 | 点击后没变化 | 若仍「状态未知」，说明查询未成功，需先恢复后台；恢复后会自动刷新 |
 | 开关显示「开」但平台没数据 | 只上传**开启后新开始**的轮次；先在页头确认「开」，再发送新消息；发送结果看 `control-events.jsonl` 的 `sent/failed` |
 | 需要看最近发送结果 | 在该会话输入 `/lf status` |
+| `/lf on --history` 没有补传 | 补传在**下一条消息开始**时触发；确认已经发出新消息；`/lf status` 看「待补传 N 轮」；`/lf off` 会清空待补传 |
+| 历史补传数量不对 | 只包含开启前**已完成**的轮次；进行中/失败轮次不计；每个历史轮次单独一个 trace |
