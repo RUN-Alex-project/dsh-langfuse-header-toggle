@@ -1001,6 +1001,18 @@ const MAX_CONFIG_VALUE = 2048;
 const USER_ID_PATTERN = /^[a-z]((30|00|60)\d{6}|wx\d{6,})$/;
 
 /**
+ * Config paths whose on-disk value changed after the running uploader loaded.
+ *
+ * The uploader reads `config.json` exactly once at module load, so a save on an
+ * already-running instance cannot take effect until DSH (or the uploader row)
+ * reloads. `ready` must stay false for these paths instead of reporting the
+ * stale in-memory config as current. Replacing the Host module resets this
+ * marker, which is acceptable because that reload is the same event that would
+ * re-import the uploader.
+ */
+const configPendingReload = new Set();
+
+/**
  * Build one field-scoped validation failure.
  * @param {string} field - one of baseUrl/publicKey/secretKey/userId/maxChars.
  * @param {string} reason - stable reason code (never a credential value).
@@ -1136,20 +1148,22 @@ function managedBlockWritten(profilePatch) {
 
 /**
  * Read the running uploader's own diagnostic snapshot, failing closed.
- * @returns {{ present: boolean, ready: boolean, version: string | null }} runtime view.
+ * @returns {{ present: boolean, ready: boolean, version: string | null, endpoint: string | null, userId: string | null }} runtime view.
  */
 function uploaderRuntime() {
   const controller = locateUploader();
-  if (controller === null) return { present: false, ready: false, version: null };
+  if (controller === null) return { present: false, ready: false, version: null, endpoint: null, userId: null };
   try {
     const diagnostic = controller.diagnostics();
     return {
       present: true,
       ready: diagnostic?.ready === true,
       version: typeof diagnostic?.version === 'string' ? diagnostic.version : null,
+      endpoint: typeof diagnostic?.endpoint === 'string' ? diagnostic.endpoint : null,
+      userId: typeof diagnostic?.userId === 'string' ? diagnostic.userId : null,
     };
   } catch {
-    return { present: true, ready: false, version: null };
+    return { present: true, ready: false, version: null, endpoint: null, userId: null };
   }
 }
 
@@ -1181,11 +1195,24 @@ export function readConfigStatus(ctx) {
   const secretKey = typeof raw?.secretKey === 'string' ? raw.secretKey.trim() : '';
   const normalizedMax = normalizeMaxChars(raw?.maxChars);
   const normalizedBase = normalizeBaseUrl(raw?.baseUrl);
+  // The diagnostics only carry non-secret identity; use it to catch a running
+  // uploader that is still pointed at a previous endpoint/user after a Host
+  // reload reset the pending marker.
+  const runtimeMatchesFile = validation.valid && (
+    runtime.present !== true
+    || runtime.endpoint === null
+    || runtime.endpoint === validation.config.baseUrl
+  ) && (
+    runtime.present !== true
+    || runtime.userId === null
+    || runtime.userId === validation.config.userId
+  );
   return {
     path: paths.configPath,
     exists,
     valid: validation.valid,
-    ready: validation.valid && runtime.ready,
+    ready: validation.valid && runtime.ready && !configPendingReload.has(paths.configPath) && runtimeMatchesFile,
+    pendingReload: configPendingReload.has(paths.configPath),
     baseUrl: validation.valid
       ? validation.config.baseUrl
       : (normalizedBase.ok ? normalizedBase.value : null),
@@ -1287,6 +1314,15 @@ export function saveConfig(payload, options = {}) {
   if (!validation.valid) {
     return invalidConfig(validation.field, validation.reason, validation.message);
   }
+  // A semantic change invalidates the running uploader's in-memory config: it
+  // reads the file once at module load. Formatting-only rewrites keep `ready`.
+  const previous = validateConfig(existing);
+  const unchanged = previous.valid
+    && previous.config.baseUrl === validation.config.baseUrl
+    && previous.config.publicKey === validation.config.publicKey
+    && previous.config.secretKey === validation.config.secretKey
+    && previous.config.userId === validation.config.userId
+    && previous.config.maxChars === validation.config.maxChars;
   try {
     writeConfigAtomic(paths, validation.config);
   } catch (error) {
@@ -1299,6 +1335,7 @@ export function saveConfig(payload, options = {}) {
       },
     };
   }
+  if (!unchanged) configPendingReload.add(paths.configPath);
   return {
     ok: true,
     value: readConfigStatus(options.ctx),

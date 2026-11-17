@@ -74,7 +74,7 @@ function temporaryFiles(dir) {
 }
 
 /** A fake uploader that records every control command it receives. */
-function spyUploader() {
+function spyUploader(diagnostics = {}) {
   const calls = [];
   const controller = {
     calls,
@@ -83,7 +83,7 @@ function spyUploader() {
       return { kind: 'success', text: 'ok' };
     },
     diagnostics() {
-      return { version: '9.9.9', defaultUpload: false, ready: true, sessions: [] };
+      return { version: '9.9.9', defaultUpload: false, ready: true, sessions: [], ...diagnostics };
     },
   };
   return controller;
@@ -233,6 +233,64 @@ test('save refuses to inherit stored keys onto a different origin', async t => {
   });
   assert.equal(accepted.ok, true);
   assert.equal(JSON.parse(fs.readFileSync(env.configPath, 'utf8')).baseUrl, 'https://langfuse-2.example.com');
+});
+
+test('ready stays false after saving a changed config on a running uploader', async t => {
+  const env = createHome();
+  t.after(() => env.cleanup());
+  fs.mkdirSync(env.voluntaryDir, { recursive: true });
+  const { action, ...initial } = VALID_SAVE;
+  fs.writeFileSync(env.configPath, `${JSON.stringify(initial, null, 2)}\n`, 'utf8');
+  globalThis[UPLOADER_SYMBOL] = { controller: spyUploader(), version: '9.9.9' };
+  try {
+    const before = await configAction(env.ctx, { action: 'get' });
+    assert.equal(before.value.ready, true, 'unchanged file + ready runtime is honestly ready');
+    const saved = await configAction(env.ctx, { ...VALID_SAVE, maxChars: 4000 });
+    assert.equal(saved.ok, true);
+    assert.equal(saved.value.ready, false, 'a changed file must not claim the running uploader loaded it');
+    assert.equal(saved.value.pendingReload, true);
+    const after = await configAction(env.ctx, { action: 'get' });
+    assert.equal(after.value.ready, false);
+  } finally {
+    delete globalThis[UPLOADER_SYMBOL];
+  }
+});
+
+test('a save that does not change any value keeps ready true', async t => {
+  const env = createHome();
+  t.after(() => env.cleanup());
+  fs.mkdirSync(env.voluntaryDir, { recursive: true });
+  const { action, ...initial } = VALID_SAVE;
+  fs.writeFileSync(env.configPath, `${JSON.stringify(initial, null, 2)}\n`, 'utf8');
+  globalThis[UPLOADER_SYMBOL] = { controller: spyUploader(), version: '9.9.9' };
+  try {
+    const saved = await configAction(env.ctx, VALID_SAVE);
+    assert.equal(saved.ok, true);
+    assert.equal(saved.value.ready, true);
+    assert.equal(saved.value.pendingReload, false);
+  } finally {
+    delete globalThis[UPLOADER_SYMBOL];
+  }
+});
+
+test('ready is false when the running uploader reports a different endpoint', async t => {
+  const env = createHome();
+  t.after(() => env.cleanup());
+  fs.mkdirSync(env.voluntaryDir, { recursive: true });
+  const { action, ...initial } = VALID_SAVE;
+  fs.writeFileSync(env.configPath, `${JSON.stringify(initial, null, 2)}\n`, 'utf8');
+  globalThis[UPLOADER_SYMBOL] = {
+    controller: spyUploader({ endpoint: 'https://old.example.com', userId: initial.userId }),
+    version: '9.9.9',
+  };
+  try {
+    const status = await configAction(env.ctx, { action: 'get' });
+    assert.equal(status.value.valid, true);
+    assert.equal(status.value.uploader.ready, true);
+    assert.equal(status.value.ready, false, 'a stale endpoint must not be reported as ready');
+  } finally {
+    delete globalThis[UPLOADER_SYMBOL];
+  }
 });
 
 test('save failure cleans the temporary file and reports write_failed', async t => {

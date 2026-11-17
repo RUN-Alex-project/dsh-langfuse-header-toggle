@@ -85,7 +85,7 @@ DeepSeek Harness（DSH）顶部栏的「**本会话上传到 Langfuse**」开关
 
 **脱敏**：浏览器只能拿到 `publicKeySet`/`secretKeySet` 布尔值和 `publicKeyHint`（如 `pk-lf-…1a2b`，只露末 4 位）；完整 `publicKey` 与 `secretKey` 从不返回，校验错误信息也不回显密钥值。
 
-**为什么保存后可能还要重启**：上传器只在模块加载时读取一次 `config.json`。如果它早已运行且此前没有有效配置，保存后状态会显示「上传器尚未读取该配置，重启 DSH 后生效」；这是如实报告，不是保存失败。
+**为什么保存后可能还要重启**：上传器只在模块加载时读取一次 `config.json`。如果它早已运行（无论此前是否加载过有效配置），保存了不同内容后状态会显示「上传器尚未读取该配置，重启 DSH 后生效」；只有保存内容与当前文件完全一致时才继续显示「上传器已读取配置」。这是如实报告，不是保存失败。
 
 **不会重复迁移**：若仍检测到原版自动采集行（`dsh-langfuse` / `dsh-langfuse-telemetry`，无论来自 Loader 条目还是 patch 文本），`install` 会拒绝（`auto_collector_present`）并提示改用 1.1 的「迁移为自愿上传」流程，不会重复实现迁移。
 
@@ -286,7 +286,7 @@ plugin_manager action=remove_bundle target=@local/dsh-langfuse-header-toggle
 | `tests/client.test.mjs` | 客户端注册、竞态门、结果归一、请求形态、配置表单辅助函数测试（10 项） |
 | `tests/client-structure.test.mjs` | 左右分离结构/行为测试 + 配置表单默认不展开（5 项） |
 | `tests/migration.test.mjs` | 上传钩子分类、patch 行移除/管理块、迁移守卫、环境变量生成配置与临时 profile 端到端测试（12 项） |
-| `tests/config.test.mjs` | 连接配置校验/脱敏/原子写、安装幂等与备份、拒绝自动采集行、不调用 command()（11 项） |
+| `tests/config.test.mjs` | 连接配置校验/脱敏/原子写、运行中上传器的 ready/pending 判定、安装幂等与备份、拒绝自动采集行、不调用 command()（15 项） |
 | `tests/uploader-history.test.mjs` | 上传器 `/lf on --history` 历史补传集成测试（3 项，使用真实上传器模块与本地 OTLP sink） |
 | `verification/` | 本地验证记录（截图/日志/查询结果，含会话内容，**不随仓库发布**） |
 | `backups/` | 本地安装前 profile 备份（**不随仓库发布**） |
@@ -300,7 +300,7 @@ plugin_manager action=remove_bundle target=@local/dsh-langfuse-header-toggle
 node --check index.js
 node --check client.js
 
-# 离线测试（49 项：桥接 8 + 客户端 10 + 控件结构 5 + 迁移 12 + 配置 11 + 上传器历史 3）
+# 离线测试（53 项：桥接 8 + 客户端 10 + 控件结构 5 + 迁移 12 + 配置 15 + 上传器历史 3）
 node tests/bridge.test.mjs
 node tests/client.test.mjs
 node tests/client-structure.test.mjs
