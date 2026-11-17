@@ -23,6 +23,7 @@ import {
   ROUTE_STATE,
   ROUTE_SCAN,
   ROUTE_MIGRATE,
+  ROUTE_CONFIG,
 } from '../index.js';
 
 const UPLOADER_PATH = process.env.DSH_LANGFUSE_UPLOADER
@@ -151,7 +152,7 @@ test('handle rejects unknown endpoints and malformed payloads', () => {
   assert.equal(bridge.handle('state', 'oops').error.code, 'bad_request');
 });
 
-test('Host plugin registers four authenticated /api routes and removes them on unload', async () => {
+test('Host plugin registers five authenticated /api routes and removes them on unload', async () => {
   const controller = fakeController({ command: () => ({ kind: 'error', text: 'refused by test' }) });
   globalThis[UPLOADER_SYMBOL] = { controller, version: '9.9.9' };
   try {
@@ -184,14 +185,15 @@ test('Host plugin registers four authenticated /api routes and removes them on u
       },
     };
     apply(ctx);
-    assert.deepEqual(routes.map(route => route.path), [ROUTE_STATE, ROUTE_SET, ROUTE_SCAN, ROUTE_MIGRATE]);
+    assert.deepEqual(routes.map(route => route.path), [ROUTE_STATE, ROUTE_SET, ROUTE_SCAN, ROUTE_MIGRATE, ROUTE_CONFIG]);
     assert.ok(ROUTE_STATE.startsWith('/api/'));
     assert.ok(ROUTE_SCAN.startsWith('/api/'));
+    assert.ok(ROUTE_CONFIG.startsWith('/api/'));
     for (const route of routes) {
       assert.deepEqual(route.methods, ['POST']);
       assert.equal(route.requestBody, 'buffered');
     }
-    assert.equal(effects.length, 4, 'every route is tied to the plugin fiber');
+    assert.equal(effects.length, 5, 'every route is tied to the plugin fiber');
 
     const request = new Request(`http://127.0.0.1${ROUTE_STATE}`, {
       method: 'POST',

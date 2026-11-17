@@ -165,3 +165,11 @@ test('unknown state never exposes switch semantics and the switch only re-querie
   assert.equal(calls.setUpload.length, 0, 'an unknown state click must never grant consent');
   assert.equal(calls.queryUpload.length, 1, 'it retries the query instead');
 });
+
+test('the connection config form stays hidden and idle until the panel is opened', () => {
+  const { nodes, calls } = render({ kind: 'ready', enabled: false, detail: { enabled: false, sent: 0, failed: 0, last: null } });
+  assert.equal(nodes.some(node => node.props?.className === 'lfh-config'), false, 'the config area is not mounted on page load');
+  assert.equal(nodes.some(node => node.props?.className === 'lfh-input'), false, 'no config input exists before the panel opens');
+  assert.equal(calls.queryUpload.length, 0, 'mounting never queries the config route');
+  assert.equal(calls.setUpload.length, 0, 'mounting never submits anything');
+});

@@ -1,11 +1,11 @@
 # dsh-langfuse-header-toggle
 
-DeepSeek Harness（DSH）顶部栏的「**本会话上传到 Langfuse**」开关插件：把现有 `/lf on`、`/lf off`、`/lf off-all` 命令的逐会话授权，做成标题右侧一个始终看得见、点一下就能用的开关。
+DeepSeek Harness（DSH）顶部栏的「**本会话上传到 Langfuse**」开关插件：把现有 `/lf on`、`/lf off`、`/lf off-all` 命令的逐会话授权，做成标题右侧一个始终看得见、点一下就能用的开关；同一面板里还提供 **Langfuse 连接配置**与上传器安装入口。
 
 | 项目 | 值 |
 | --- | --- |
 | 插件包名 | `@local/dsh-langfuse-header-toggle` |
-| 版本 | 1.1.0 |
+| 版本 | 1.2.0 |
 | 目标 DSH | Desktop **0.2.2-rc.3**（profile `desktop`，`<DSH 安装目录>` 安装） |
 | 依赖的现有上传器 | `dsh-langfuse-voluntary` **1.0.2**（`%USERPROFILE%\.dsh\langfuse-voluntary\dsh-langfuse-voluntary-1.0.2.mjs`；在 1.0.1 基础上新增 `/lf on --history`，采集/上传逻辑未变） |
 | 安装方式 | 本地目录 Bundle，`plugin_manager` / 插件页「添加插件」，已热加载 |
@@ -67,6 +67,28 @@ DeepSeek Harness（DSH）顶部栏的「**本会话上传到 Langfuse**」开关
 
 > 注意：迁移只处理 **DSH Loader** 里的上传钩子。原版 oh-langfuse 还可能通过 Codex 的 Python hook 上报（不在 DSH 内），那部分不会被自动处理，面板也不会误报成已清理。
 
+## 1.2 安装后配置（1.2.0）
+
+1.2.0 起不再需要手工创建 `config.json`，也不需要手工往 Loader 里加行——在插件自己的面板里填写即可：
+
+1. 点击会话标题右侧的「本会话上传」打开面板，找到「**Langfuse 连接配置**」区域（表单只在打开面板后出现，页面加载时不会展开、也不会自动提交）；
+2. 填写字段：
+   - `baseUrl`：Langfuse 地址，必须是纯 origin（如 `https://langfuse.example.com`；不能带路径、用户名或密码）；
+   - `publicKey`：`pk-lf-` 开头；
+   - `secretKey`：`sk-lf-` 开头；输入框是密码类型，已保存的值**永远不会回填**浏览器，留空表示保持原值；但**更换 `baseUrl`（origin 变化）时必须重新填写**，避免旧密钥被带到另一个主机；
+   - `userId`：工号，格式如 `j60000000`；
+   - `maxChars`：可选，默认 20000，超过 20000 按 20000 保存；
+3. 点「保存配置」。Host 用与上传器 `loadConfig()` 相同的规则逐字段校验，失败时按 `{ code: 'invalid_config', details: { field, reason } }` 返回并在对应输入框下显示中文原因；成功后以「临时文件 + rename」原子替换 `<DSH home>/langfuse-voluntary/config.json`（POSIX 下 `0600`，Windows 上尽力而为）；
+4. 若面板显示「上传器未安装」，点「安装上传器」：Host 先把内置的 1.0.2 模块复制到 `<DSH home>/langfuse-voluntary/`（目标已存在且内容一致则跳过），再用受管块把自愿上传行写入 profile 的 `cordis.patch.yml`（写前备份到 `<DSH home>/langfuse-voluntary/backups/`，命名沿用迁移流程），最多等 8 秒观察 `locateUploader()`/`scanHooks()`；返回 `restartRequired: true` 时按提示重启 DSH。
+
+**默认关闭语义（配置 ≠ 开启上传）**：`save` 与 `install` 都**不会**调用上传器的 `command()`/`set()`，也不会改变任何会话的授权状态；两者返回的状态都带 `defaultOff: true`。配置只决定上传器能否连接 Langfuse，是否上传仍由每个会话的开关（或 `/lf on`）单独决定，且所有会话默认关闭。保存成功后面板明确显示「已保存，仍默认关闭：配置不会开启任何会话的上传，需要时按会话点开关」。
+
+**脱敏**：浏览器只能拿到 `publicKeySet`/`secretKeySet` 布尔值和 `publicKeyHint`（如 `pk-lf-…1a2b`，只露末 4 位）；完整 `publicKey` 与 `secretKey` 从不返回，校验错误信息也不回显密钥值。
+
+**为什么保存后可能还要重启**：上传器只在模块加载时读取一次 `config.json`。如果它早已运行且此前没有有效配置，保存后状态会显示「上传器尚未读取该配置，重启 DSH 后生效」；这是如实报告，不是保存失败。
+
+**不会重复迁移**：若仍检测到原版自动采集行（`dsh-langfuse` / `dsh-langfuse-telemetry`，无论来自 Loader 条目还是 patch 文本），`install` 会拒绝（`auto_collector_present`）并提示改用 1.1 的「迁移为自愿上传」流程，不会重复实现迁移。
+
 ## 2. 与 `/lf` 命令的关系
 
 **同一个状态机，同一个后端**。开关只是现有上传器授权状态的图形入口：
@@ -114,8 +136,8 @@ DeepSeek Harness（DSH）顶部栏的「**本会话上传到 Langfuse**」开关
 5. **默认只上传开启后新开始的轮次**：开启时由上传器记录当时的事件 `seq`；默认不扫描、不补传历史。唯一例外是显式执行 `/lf on --history`：只暂存开启前已完成的轮次，并在下一条消息开始时补传（见 2.2）；进行中的轮次、其它会话、未开启时的内容都不会被读取。
 6. **关闭即清理**：关闭会清空尚未提交的文本/轮次缓存并中止在途请求；已发送到服务端的数据无法撤回（tooltip 已说明）。
 7. **不落地待上传正文**：关闭期间不缓存对话正文，不在退出时补发，没有后台队列或自动重试。
-8. **前端无密钥**：浏览器只收到 `{enabled, ready, version, sent, failed, last}` 这类状态；真正上传仍由 Host 侧原上传器执行。
-9. **不新增控制端口**：四个接口（state/set/scan/migrate）都是 DSH 现有 `/api` 共享通道上的精确路由，复用 DSH 的 Host/Origin 校验和浏览器 Cookie 认证，且仅 owner Peer 可达。
+8. **前端无密钥**：浏览器只收到 `{enabled, ready, version, sent, failed, last}` 这类状态；连接配置也只返回布尔值、末 4 位提示和明文非密钥字段（`baseUrl`/`userId`/`maxChars`），完整公钥与私钥从不返回。真正上传仍由 Host 侧原上传器执行。
+9. **不新增控制端口**：五个接口（state/set/scan/migrate/config）都是 DSH 现有 `/api` 共享通道上的精确路由，复用 DSH 的 Host/Origin 校验和浏览器 Cookie 认证，且仅 owner Peer 可达。
 10. **不改 token 口径、不改度量平台成员资料**：全部沿用现有上传器的逻辑。
 11. **开关不是「假开关」**：切换直接作用于上传器授权状态；关闭后上传器自己不再采集、不再发送。
 
@@ -125,16 +147,17 @@ DeepSeek Harness（DSH）顶部栏的「**本会话上传到 Langfuse**」开关
 浏览器（client.js）
   └─ slot: conversation.session.header.actions（order 0，会话作用域，props 自带 sessionId）
        ├─ 挂载/切换会话时立即查询；轮询 4s；窗口聚焦、标签可见、Connection 代际变化时刷新
-       ├─ 左侧名称打开扫描面板：每次打开 POST scan；确认后 POST migrate（两段式）
+       ├─ 左侧名称打开扫描面板：每次打开 POST scan 与 config(get)；确认后 POST migrate（两段式）；保存配置 POST config(save)；安装上传器 POST config(install)
        ├─ createAnswerGate：丢弃「其它会话的迟到响应」「被新查询/新操作覆盖的响应」
-       └─ POST api/dsh-langfuse-toggle/state | set | scan | migrate   （同源 Cookie，JSON）
+       └─ POST api/dsh-langfuse-toggle/state | set | scan | migrate | config   （同源 Cookie，JSON）
                                    │
 DSH Host（index.js，Cordis 插件）
-       └─ connection.fetch.register 四条 /api 精确路由
+       └─ connection.fetch.register 五条 /api 精确路由
             ├─ 由 DSH 现有 /api 通道完成 Host/Origin 校验 + 浏览器认证 + owner Peer 限制
             ├─ state/set：createBridge 读 diagnostics()、转发 command()（不采集/不上传）
             ├─ scan：ctx.loader.entries() 枚举上传钩子 + 文件存在性 + 运行时诊断符号（只读）
-            └─ migrate：备份 → 移除原版采集行 → 写入自愿行管理块 → 等待加载 → 报告是否需重启
+            ├─ migrate：备份 → 移除原版采集行 → 写入自愿行管理块 → 等待加载 → 报告是否需重启
+            └─ config：get 读取脱敏状态；save 逐字段校验后原子写 config.json；install 复制内置模块 + 写受管 Loader 行 + 备份（三者都不调用 command()，默认关闭）
                                    │
 现有上传器 dsh-langfuse-voluntary 1.0.2（1.0.1 + `/lf on --history`；采集/上传逻辑未变）
        └─ 原有采集/缓存/OTLP 上传/`/lf` 命令/`off-all`/审计日志
@@ -147,7 +170,7 @@ DSH Host（index.js，Cordis 插件）
 
 ## 5. 安装
 
-前提：DSH Desktop 0.2.2-rc.3 正在运行。若机器上已有 `dsh-langfuse-voluntary` 1.0.2 并 active，开关装好即可用；若还是原版自动采集，装好本插件后按 1.1 节的面板迁移（可自动从 `LANGFUSE_*` 环境变量生成配置）。
+前提：DSH Desktop 0.2.2-rc.3 正在运行。若机器上已有 `dsh-langfuse-voluntary` 1.0.2 并 active，开关装好即可用；若还没有配置或上传器，装好本插件后打开面板，按 1.2 节填写连接配置并点「安装上传器」；若还是原版自动采集，按 1.1 节的面板迁移（可自动从 `LANGFUSE_*` 环境变量生成配置）。
 
 方式 A（界面）：**插件 → 添加插件 → 本地目录**，选择本目录。
 方式 B（命令）：
@@ -239,6 +262,11 @@ plugin_manager action=remove_bundle target=@local/dsh-langfuse-header-toggle
 - 把对应 `.bak` 复制回原路径（profile 的 `cordis.patch.yml`，以及存在过的 `~/.dsh/cordis.patch.yml`），然后刷新/重启 DSH 让 Loader 重载即可；
 - 迁移只改这两个配置文件，并可能把内置副本复制到 `~/.dsh/langfuse-voluntary/`（仅当该目录没有上传器模块时）；不改 `package.json`，不改你已有的 `config.json` 和上传器文件。
 
+### 撤销 1.2.0 的「保存配置 / 安装上传器」
+- 「保存配置」只写 `<DSH home>/langfuse-voluntary/config.json`；如需撤销，删除该文件或把备份的旧配置复制回来（该文件不在 profile 里，卸载插件不会自动删除）。
+- 「安装上传器」只复制内置上传器模块并改 profile 的 `cordis.patch.yml`（写前已备份）；卸载插件不会删除 `~/.dsh/langfuse-voluntary/` 下的模块和 `config.json`，需要时按 `backups/` 里的 `.bak` 还原 patch，或手动删除该目录中的上传器文件。
+- 这两个操作都不会开启任何会话；撤销后所有会话仍是关闭状态。
+
 ### 安装前备份
 `backups/<时间戳>/`：安装前 profile 的 `package.json`、`cordis.patch.yml`、`pnpm-lock.yaml`、`pnpm-workspace.yaml`、`cordis.yml` 及 `backup.json`（含 sha256）。
 
@@ -248,16 +276,17 @@ plugin_manager action=remove_bundle target=@local/dsh-langfuse-header-toggle
 | --- | --- |
 | `package.json` | Bundle 清单：`dsh.bundle.patch` + `dsh.client`（web 平台、立即加载、依赖顺序） |
 | `cordis.patch.yml` | Host 行插入：`id: dsh-langfuse-header-toggle` |
-| `index.js` | Host：四条认证 `/api` 路由（state/set/scan/migrate）+ 扫描与迁移实现 + 卸载清理；无采集/上传逻辑 |
-| `client.js` | 浏览器端：开关组件 + 上传钩子扫描面板（每次打开重新扫描）、竞态门、tooltip、无障碍、窄宽简写 |
-| `vendor/dsh-langfuse-voluntary-1.0.2.mjs` | 迁移时使用的自愿上传器副本（与已安装 1.0.2 一致；仅在目标目录缺失时复制） |
+| `index.js` | Host：五条认证 `/api` 路由（state/set/scan/migrate/config）+ 扫描、迁移、配置校验/原子写、上传器安装、卸载清理；无采集/上传逻辑 |
+| `client.js` | 浏览器端：开关组件 + 上传钩子扫描面板（每次打开重新扫描）+ Langfuse 连接配置表单与上传器安装入口、竞态门、tooltip、无障碍、窄宽简写 |
+| `vendor/dsh-langfuse-voluntary-1.0.2.mjs` | 迁移与「安装上传器」使用的自愿上传器副本（与已安装 1.0.2 一致；仅在目标目录缺失或内容不同时复制） |
 | `vendor/config.example.json` | 配置模板（占位符，无真实密钥），说明字段与放置位置 |
 | `locale/en.json`, `locale/zh.json` | 插件管理器里显示的标题/描述 |
 | `icon.svg` | 插件图标 |
-| `tests/bridge.test.mjs` | 桥接契约 + 真实上传器类集成测试（8 项，含 scan/migrate 路由契约） |
-| `tests/client.test.mjs` | 客户端注册、竞态门、结果归一、请求形态测试（9 项） |
-| `tests/client-structure.test.mjs` | 左右分离结构/行为测试（4 项） |
+| `tests/bridge.test.mjs` | 桥接契约 + 真实上传器类集成测试（8 项，含五条路由注册契约） |
+| `tests/client.test.mjs` | 客户端注册、竞态门、结果归一、请求形态、配置表单辅助函数测试（10 项） |
+| `tests/client-structure.test.mjs` | 左右分离结构/行为测试 + 配置表单默认不展开（5 项） |
 | `tests/migration.test.mjs` | 上传钩子分类、patch 行移除/管理块、迁移守卫、环境变量生成配置与临时 profile 端到端测试（12 项） |
+| `tests/config.test.mjs` | 连接配置校验/脱敏/原子写、安装幂等与备份、拒绝自动采集行、不调用 command()（11 项） |
 | `tests/uploader-history.test.mjs` | 上传器 `/lf on --history` 历史补传集成测试（3 项，使用真实上传器模块与本地 OTLP sink） |
 | `verification/` | 本地验证记录（截图/日志/查询结果，含会话内容，**不随仓库发布**） |
 | `backups/` | 本地安装前 profile 备份（**不随仓库发布**） |
@@ -271,11 +300,12 @@ plugin_manager action=remove_bundle target=@local/dsh-langfuse-header-toggle
 node --check index.js
 node --check client.js
 
-# 离线测试（36 项：桥接 8 + 客户端 9 + 控件结构 4 + 迁移 12 + 上传器历史 3）
+# 离线测试（49 项：桥接 8 + 客户端 10 + 控件结构 5 + 迁移 12 + 配置 11 + 上传器历史 3）
 node tests/bridge.test.mjs
 node tests/client.test.mjs
 node tests/client-structure.test.mjs
 node tests/migration.test.mjs
+node tests/config.test.mjs
 node tests/uploader-history.test.mjs
 
 # 可选：真实上传器集成测试会读取已安装的 1.0.2 上传器（只读导入）
@@ -290,6 +320,9 @@ Host 接口（安装后）：
 - `POST /api/dsh-langfuse-toggle/set`，body `{ "sessionId": "…", "enabled": true|false }` → `{ ok: true, value: {...} }`
 - `POST /api/dsh-langfuse-toggle/scan`，body `{}` → 上传钩子清单/运行时/配置/迁移可用性（只读）
 - `POST /api/dsh-langfuse-toggle/migrate`，body `{ "confirm": true }` → 备份并迁移；未带 `confirm` 一律拒绝
+- `POST /api/dsh-langfuse-toggle/config`，body `{ "action": "get" }` → `{ ok: true, value: <status> }`（脱敏状态：`path/exists/valid/ready/baseUrl/userId/maxChars/publicKeySet/secretKeySet/publicKeyHint/defaultOff/uploader`）
+- `POST /api/dsh-langfuse-toggle/config`，body `{ "action": "save", "baseUrl", "publicKey", "secretKey", "userId", "maxChars"? }` → 校验后原子写 `config.json`，返回 `{ ok: true, value: <status>, saved: true, defaultOff: true }`；校验失败返回 `{ ok: false, error: { code: "invalid_config", message, details: { field, reason } } }`
+- `POST /api/dsh-langfuse-toggle/config`，body `{ "action": "install" }` → 复制内置上传器 + 写受管 Loader 行（写前备份），返回 `{ ok, status: <status>, restartRequired, copied, changed, backups, alreadyInstalled, defaultOff: true }`；存在原版自动采集行时拒绝为 `auto_collector_present`
 - 未认证请求由 DSH `/api` 通道直接 401/403；非 owner Peer 不可达；错误一律 `{ ok: false, error: { code, message, details } }`。
 
 ## 11. 故障排查
@@ -297,7 +330,10 @@ Host 接口（安装后）：
 | 现象 | 检查 |
 | --- | --- |
 | 页头没有开关 | 插件页确认 `@local/dsh-langfuse-header-toggle` 已启用；刷新页面一次；确认当前会话不是空白「新会话」页 |
-| 一直「状态未知」 | 插件页确认 `dsh-langfuse-voluntary` 行（`include:dsh-langfuse-voluntary-1-0-1`）active；查看 `%USERPROFILE%\.dsh\langfuse-voluntary\control-events.jsonl` 最后一条 `loaded` |
+| 一直「状态未知」 | 插件页确认 `dsh-langfuse-voluntary` 行（`include:dsh-langfuse-voluntary-1-0-1`）active；打开面板看「Langfuse 连接配置」是否 `配置有效`；查看 `%USERPROFILE%\.dsh\langfuse-voluntary\control-events.jsonl` 最后一条 `loaded` |
+| 面板里没有「Langfuse 连接配置」 | 该区域只在点开左侧「本会话上传」后出现；页面加载时不会展开。若打开后一直「正在读取配置…」，看浏览器控制台/刷新页面 |
+| 保存配置成功但仍「状态未知」 | 上传器只在加载时读取一次 `config.json`；状态里若有「上传器尚未读取该配置」，重启 DSH 或重新加载上传器行后再点开关 |
+| 点「安装上传器」被拒绝 | 面板提示「检测到原版自动采集行」时，先按 1.1 节执行「迁移为自愿上传」；安装接口不会重复实现迁移 |
 | 点击后没变化 | 若仍「状态未知」，说明查询未成功，需先恢复后台；恢复后会自动刷新 |
 | 开关显示「开」但平台没数据 | 只上传**开启后新开始**的轮次；先在页头确认「开」，再发送新消息；发送结果看 `control-events.jsonl` 的 `sent/failed` |
 | 需要看最近发送结果 | 在该会话输入 `/lf status` |
