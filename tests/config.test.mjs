@@ -293,6 +293,57 @@ test('ready is false when the running uploader reports a different endpoint', as
   }
 });
 
+test('a stored invalid origin cannot let the stored secret follow a new host', async t => {
+  const env = createHome();
+  t.after(() => env.cleanup());
+  fs.mkdirSync(env.voluntaryDir, { recursive: true });
+  fs.writeFileSync(env.configPath, JSON.stringify({
+    baseUrl: 'not-a-url',
+    publicKey: VALID_SAVE.publicKey,
+    secretKey: VALID_SAVE.secretKey,
+    userId: VALID_SAVE.userId,
+    maxChars: 20000,
+  }), 'utf8');
+
+  const rejected = await configAction(env.ctx, {
+    action: 'save',
+    baseUrl: 'https://langfuse-2.example.com',
+    userId: VALID_SAVE.userId,
+  });
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.error.details.field, 'secretKey');
+  assert.equal(rejected.error.details.reason, 'required_for_new_host');
+  assert.equal(JSON.parse(fs.readFileSync(env.configPath, 'utf8')).baseUrl, 'not-a-url');
+
+  const accepted = await configAction(env.ctx, {
+    action: 'save',
+    baseUrl: 'https://langfuse-2.example.com',
+    publicKey: VALID_SAVE.publicKey,
+    secretKey: VALID_SAVE.secretKey,
+    userId: VALID_SAVE.userId,
+  });
+  assert.equal(accepted.ok, true);
+  assert.equal(JSON.parse(fs.readFileSync(env.configPath, 'utf8')).baseUrl, 'https://langfuse-2.example.com');
+});
+
+test('install replaces a differing existing module and reports it', async t => {
+  const env = createHome();
+  t.after(() => env.cleanup());
+  fs.mkdirSync(env.voluntaryDir, { recursive: true });
+  const installedModule = path.join(env.voluntaryDir, `dsh-langfuse-voluntary-${VENDORED_UPLOADER_VERSION}.mjs`);
+  fs.writeFileSync(installedModule, '// stale uploader module\n', 'utf8');
+
+  const result = await installUploader(env.ctx, { reloadTimeoutMs: 0 });
+  assert.equal(result.ok, true);
+  assert.equal(result.copied, true);
+  assert.equal(result.replaced, true);
+  assert.equal(result.alreadyInstalled, false);
+  assert.ok(result.backups.some(backup => backup.endsWith('.bak') && fs.existsSync(backup)),
+    'the replaced module is backed up');
+  const vendored = fileURLToPath(new URL(`../vendor/dsh-langfuse-voluntary-${VENDORED_UPLOADER_VERSION}.mjs`, import.meta.url));
+  assert.equal(fs.readFileSync(installedModule, 'utf8'), fs.readFileSync(vendored, 'utf8'));
+});
+
 test('save failure cleans the temporary file and reports write_failed', async t => {
   const env = createHome();
   t.after(() => env.cleanup());
@@ -455,6 +506,9 @@ test('the /config route dispatches get, save, and rejects unknown actions', asyn
   const badBody = await call({ action: 'launch' });
   assert.equal(badBody.ok, false);
   assert.equal(badBody.error.code, 'bad_request');
+  const unconfirmedInstall = await call({ action: 'install' });
+  assert.equal(unconfirmedInstall.ok, false);
+  assert.equal(unconfirmedInstall.error.code, 'confirmation_required');
 });
 
 test('scan status redacts a malformed file that still holds a secret', async t => {

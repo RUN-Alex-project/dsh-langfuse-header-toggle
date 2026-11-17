@@ -826,7 +826,7 @@ function sleep(ms) {
   return new Promise(resolve => { setTimeout(resolve, ms); });
 }
 
-let migrationRunning = false;
+let profileWriteRunning = false;
 
 /**
  * Rewrite the profile patch (and the home-level patch when the original
@@ -842,10 +842,10 @@ let migrationRunning = false;
  * @returns {Promise<object>} migration result for the browser.
  */
 export async function migrateHooks(ctx, options = {}) {
-  if (migrationRunning) {
-    return { ok: false, error: { code: 'busy', message: 'a migration is already running', details: {} } };
+  if (profileWriteRunning) {
+    return { ok: false, error: { code: 'busy', message: 'another profile write is already running', details: {} } };
   }
-  migrationRunning = true;
+  profileWriteRunning = true;
   try {
     if (options?.confirm !== true) {
       return { ok: false, error: { code: 'confirmation_required', message: 'confirm must be true', details: {} } };
@@ -972,7 +972,7 @@ export async function migrateHooks(ctx, options = {}) {
       },
     };
   } finally {
-    migrationRunning = false;
+    profileWriteRunning = false;
   }
 }
 
@@ -1303,8 +1303,13 @@ export function saveConfig(payload, options = {}) {
   const secretSupplied = typeof payload.secretKey === 'string' && payload.secretKey.trim().length > 0;
   const storedOrigin = normalizeBaseUrl(existing.baseUrl);
   const requestedOrigin = normalizeBaseUrl(payload.baseUrl);
-  const originMoved = storedOrigin.ok && requestedOrigin.ok && storedOrigin.value !== requestedOrigin.value;
-  if (!secretSupplied && originMoved && typeof existing.secretKey === 'string' && existing.secretKey.trim().length > 0) {
+  // An invalid or missing stored origin counts as moved: a stored secret must
+  // not follow a new host without the user re-entering it. A requested origin
+  // that does not parse falls through to validateConfig's baseUrl error.
+  const storedHasSecret = typeof existing.secretKey === 'string' && existing.secretKey.trim().length > 0;
+  const originMoved = requestedOrigin.ok
+    && (!storedOrigin.ok || storedOrigin.value !== requestedOrigin.value);
+  if (!secretSupplied && originMoved && storedHasSecret) {
     return invalidConfig('secretKey', 'required_for_new_host', 'secretKey must be re-entered when baseUrl changes');
   }
   const validation = validateConfig({
@@ -1347,8 +1352,6 @@ export function saveConfig(payload, options = {}) {
   };
 }
 
-let installRunning = false;
-
 /**
  * Install the vendored voluntary uploader and mount its managed Loader row.
  *
@@ -1357,16 +1360,18 @@ let installRunning = false;
  * before replacing it, keep the managed block idempotent, never touch
  * `config.json`, never call the uploader control path, and report whether a
  * DSH restart is required when the new module does not load within 8 seconds.
+ * A differing existing module file is only replaced because the caller already
+ * confirmed the install; the result reports `replaced` and keeps a backup.
  *
  * @param {any} ctx - Cordis Host context.
  * @param {{ reloadTimeoutMs?: number }} [options] - reload observation budget.
  * @returns {Promise<object>} install result with the redacted config status.
  */
 export async function installUploader(ctx, options = {}) {
-  if (installRunning) {
-    return { ok: false, error: { code: 'busy', message: 'an install is already running', details: {} }, defaultOff: true };
+  if (profileWriteRunning) {
+    return { ok: false, error: { code: 'busy', message: 'another profile write is already running', details: {} }, defaultOff: true };
   }
-  installRunning = true;
+  profileWriteRunning = true;
   try {
     const paths = resolvePaths();
     const hooks = loaderEntries(ctx).map(describeHook).filter(hook => hook !== null);
@@ -1478,6 +1483,7 @@ export async function installUploader(ctx, options = {}) {
       status,
       restartRequired: !loaded,
       copied: moduleChanged,
+      replaced: moduleChanged && moduleExists,
       changed,
       backups,
       alreadyInstalled: !moduleChanged && !patchChanged,
@@ -1497,7 +1503,7 @@ export async function installUploader(ctx, options = {}) {
       defaultOff: true,
     };
   } finally {
-    installRunning = false;
+    profileWriteRunning = false;
   }
 }
 
@@ -1527,7 +1533,12 @@ export async function configAction(ctx, payload) {
   }
   if (payload.action === 'get') return ok(readConfigStatus(ctx));
   if (payload.action === 'save') return saveConfig(payload, { ctx });
-  if (payload.action === 'install') return installUploader(ctx);
+  if (payload.action === 'install') {
+    if (payload.confirm !== true) {
+      return fail('confirmation_required', 'install requires confirm: true');
+    }
+    return installUploader(ctx);
+  }
   return fail('bad_request', 'action must be one of get, save, install');
 }
 

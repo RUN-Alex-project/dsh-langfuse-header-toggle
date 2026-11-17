@@ -198,6 +198,7 @@ window.__ModuleLoader__.load({
       'panel.config.uploader.install': '安装上传器',
       'panel.config.uploader.installing': '正在安装：复制模块 → 写入 Loader 行…',
       'panel.config.uploader.installedOk': '上传器已安装。',
+      'panel.config.uploader.replaced': '已替换原有的上传器模块（旧文件已备份）。',
       'panel.config.uploader.restart': '上传器已写入，但还需要重启 DSH 才能加载。',
       'panel.config.uploader.failed': '安装失败：{error}',
       'panel.config.uploader.auto': '检测到原版自动采集行；请使用现有「迁移为自愿上传」流程，安装不会重复处理迁移。',
@@ -217,6 +218,7 @@ window.__ModuleLoader__.load({
       'panel.config.fieldError': '{field}：{reason}',
       'panel.config.error.writeFailed': '无法写入配置文件，请检查目录权限。',
       'panel.config.error.installFailed': '安装未完成：上传器模块或 Loader 行缺失。',
+      'panel.config.error.confirmationRequired': '安装需要显式确认，请重新点击安装按钮。',
       'panel.config.error.busy': '已有一次安装正在进行，请稍后再试。',
     };
 
@@ -348,6 +350,7 @@ window.__ModuleLoader__.load({
       'panel.config.uploader.install': 'Install uploader',
       'panel.config.uploader.installing': 'Installing: copying the module → writing the Loader row…',
       'panel.config.uploader.installedOk': 'The uploader is installed.',
+      'panel.config.uploader.replaced': 'The existing uploader module was replaced (its old file is backed up).',
       'panel.config.uploader.restart': 'The uploader was written but a DSH restart is required to load it.',
       'panel.config.uploader.failed': 'Install failed: {error}',
       'panel.config.uploader.auto': 'An original automatic collector row is present; use the existing "Migrate to voluntary upload" flow. Install never performs that migration.',
@@ -367,6 +370,7 @@ window.__ModuleLoader__.load({
       'panel.config.fieldError': '{field}: {reason}',
       'panel.config.error.writeFailed': 'Could not write the config file; check the directory permissions.',
       'panel.config.error.installFailed': 'Install did not finish: the uploader module or its Loader row is missing.',
+      'panel.config.error.confirmationRequired': 'Installing requires an explicit confirmation; press the install button again.',
       'panel.config.error.busy': 'Another install is running; retry in a moment.',
     };
 
@@ -673,6 +677,7 @@ window.__ModuleLoader__.load({
         case 'module_missing': return t('panel.config.uploader.moduleMissing');
         case 'auto_collector_present': return t('panel.config.uploader.auto');
         case 'install_failed': return t('panel.config.error.installFailed');
+        case 'confirmation_required': return t('panel.config.error.confirmationRequired');
         case 'busy': return t('panel.config.error.busy');
         default: return t('error.generic');
       }
@@ -703,7 +708,7 @@ window.__ModuleLoader__.load({
         baseUrl: '', publicKey: '', secretKey: '', userId: '', maxChars: '20000',
       });
       const [configSave, setConfigSave] = React.useState({ phase: 'idle', field: null, reason: null, error: null });
-      const [configInstall, setConfigInstall] = React.useState({ phase: 'idle', restartRequired: false, error: null });
+      const [configInstall, setConfigInstall] = React.useState({ phase: 'idle', restartRequired: false, replaced: false, error: null });
       const panelRef = React.useRef(null);
       const rootRef = React.useRef(null);
       const gateRef = React.useRef(null);
@@ -934,22 +939,22 @@ window.__ModuleLoader__.load({
        */
       const installConfigUploader = React.useCallback(async () => {
         if (configInstall.phase === 'running') return;
-        setConfigInstall({ phase: 'running', restartRequired: false, error: null });
+        setConfigInstall({ phase: 'running', restartRequired: false, replaced: false, error: null });
         try {
-          const result = await postJson(ROUTES.config, { action: 'install' });
+          const result = await postJson(ROUTES.config, { action: 'install', confirm: true });
           const status = configStatusOf(result);
           if (status !== null) setConfig({ phase: 'ready', status, error: null });
           if (result !== null && typeof result === 'object' && result.ok === true) {
-            setConfigInstall({ phase: 'done', restartRequired: result.restartRequired === true, error: null });
+            setConfigInstall({ phase: 'done', restartRequired: result.restartRequired === true, replaced: result.replaced === true, error: null });
             void runScan();
             return;
           }
           const code = result !== null && typeof result === 'object' && typeof result.error?.code === 'string'
             ? result.error.code
             : 'generic';
-          setConfigInstall({ phase: 'error', restartRequired: false, error: code });
+          setConfigInstall({ phase: 'error', restartRequired: false, replaced: false, error: code });
         } catch (caught) {
-          setConfigInstall({ phase: 'error', restartRequired: false, error: failureDetail(caught).error.code });
+          setConfigInstall({ phase: 'error', restartRequired: false, replaced: false, error: failureDetail(caught).error.code });
         }
       }, [configInstall.phase, runScan]);
 
@@ -962,7 +967,7 @@ window.__ModuleLoader__.load({
         setPanelOpen(true);
         setApplyState({ phase: 'idle', error: null, result: null });
         setConfigSave({ phase: 'idle', field: null, reason: null, error: null });
-        setConfigInstall({ phase: 'idle', restartRequired: false, error: null });
+        setConfigInstall({ phase: 'idle', restartRequired: false, replaced: false, error: null });
         void runScan();
         void loadConfig();
       }, [loadConfig, runScan]);
@@ -1250,6 +1255,10 @@ window.__ModuleLoader__.load({
             key: 'upDone',
             className: configInstall.restartRequired ? 'lfh-panel-warn' : 'lfh-panel-ok',
           }, t(configInstall.restartRequired ? 'panel.config.uploader.restart' : 'panel.config.uploader.installedOk')));
+          if (configInstall.replaced === true) {
+            configNodes.push(el('span', { key: 'upReplaced', className: 'lfh-panel-note' },
+              t('panel.config.uploader.replaced')));
+          }
         } else if (configInstall.phase === 'error') {
           configNodes.push(el('span', { key: 'upError', className: 'lfh-panel-bad' },
             t('panel.config.uploader.failed', { error: configErrorText(t, String(configInstall.error || '')) })));

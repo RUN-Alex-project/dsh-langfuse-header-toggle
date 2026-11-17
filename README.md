@@ -286,7 +286,7 @@ plugin_manager action=remove_bundle target=@local/dsh-langfuse-header-toggle
 | `tests/client.test.mjs` | 客户端注册、竞态门、结果归一、请求形态、配置表单辅助函数测试（10 项） |
 | `tests/client-structure.test.mjs` | 左右分离结构/行为测试 + 配置表单默认不展开（5 项） |
 | `tests/migration.test.mjs` | 上传钩子分类、patch 行移除/管理块、迁移守卫、环境变量生成配置与临时 profile 端到端测试（12 项） |
-| `tests/config.test.mjs` | 连接配置校验/脱敏/原子写、运行中上传器的 ready/pending 判定、安装幂等与备份、拒绝自动采集行、不调用 command()（15 项） |
+| `tests/config.test.mjs` | 连接配置校验/脱敏/原子写、运行中上传器的 ready/pending 判定、安装确认/幂等/替换与备份、拒绝自动采集行、不调用 command()（17 项） |
 | `tests/uploader-history.test.mjs` | 上传器 `/lf on --history` 历史补传集成测试（3 项，使用真实上传器模块与本地 OTLP sink） |
 | `verification/` | 本地验证记录（截图/日志/查询结果，含会话内容，**不随仓库发布**） |
 | `backups/` | 本地安装前 profile 备份（**不随仓库发布**） |
@@ -300,7 +300,7 @@ plugin_manager action=remove_bundle target=@local/dsh-langfuse-header-toggle
 node --check index.js
 node --check client.js
 
-# 离线测试（53 项：桥接 8 + 客户端 10 + 控件结构 5 + 迁移 12 + 配置 15 + 上传器历史 3）
+# 离线测试（55 项：桥接 8 + 客户端 10 + 控件结构 5 + 迁移 12 + 配置 17 + 上传器历史 3）
 node tests/bridge.test.mjs
 node tests/client.test.mjs
 node tests/client-structure.test.mjs
