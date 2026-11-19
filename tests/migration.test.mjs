@@ -153,7 +153,7 @@ test('migrateHooks rewrites a temp profile and reports restart when nothing relo
       assert.equal(fs.existsSync(backup), true, `backup exists: ${backup}`);
     }
     assert.equal(result.backups.length, 2, 'both changed patch files were backed up');
-    assert.equal(fs.existsSync(path.join(voluntaryDir, 'dsh-langfuse-voluntary-1.0.2.mjs')), true,
+    assert.equal(fs.existsSync(path.join(voluntaryDir, 'dsh-langfuse-voluntary-1.0.3.mjs')), true,
       'the vendored uploader is installed when missing');
   } finally {
     if (savedHome === undefined) delete process.env.DSH_HOME;

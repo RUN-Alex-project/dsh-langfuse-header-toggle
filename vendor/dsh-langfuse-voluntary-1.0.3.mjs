@@ -10,10 +10,11 @@ import { execFileSync } from 'node:child_process';
 
 export const name = 'dsh-langfuse-voluntary';
 export const inject = ['commands'];
-export const VERSION = '1.0.2';
+export const VERSION = '1.0.3';
 const TRACE_NAME = 'DeepSeek Harness Agent Turn';
 const DIAGNOSTIC = Symbol.for('dsh.langfuse.voluntary');
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
+/** Per-session consent that survives uploader reloads/DSH restarts. */
 
 function iso(value) {
   const date = typeof value === 'number' ? new Date(value) : new Date(value || Date.now());
@@ -33,6 +34,60 @@ function text(value, max = 20000) {
   return '';
 }
 function sid(session) { return typeof session?.id === 'string' && session.id.length > 0 ? session.id : null; }
+/** Per-session consent that survives uploader reloads/DSH restarts. */
+const CONSENT_PATH = path.join(ROOT, 'session-consent.json');
+const CONSENT_VERSION = 1;
+const MAX_CONSENT_SESSIONS = 2000;
+
+/**
+ * Read the persisted per-session consent set.
+ * The file contains only session ids, never conversation content or credentials.
+ * @param {string} [filePath] - override used by tests.
+ * @returns {string[]} enabled session ids.
+ */
+export function readConsent(filePath = CONSENT_PATH) {
+  try {
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/, ''));
+    if (data === null || typeof data !== 'object' || data.version !== CONSENT_VERSION || !Array.isArray(data.sessions)) return [];
+    const ids = data.sessions
+      .filter(id => typeof id === 'string' && id.length > 0 && id.length <= 200)
+      .slice(0, MAX_CONSENT_SESSIONS);
+    return [...new Set(ids)];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Persist the per-session consent set atomically with best-effort private mode.
+ * @param {Iterable<string>} sessions - enabled session ids.
+ * @param {string} [filePath] - override used by tests.
+ * @returns {void}
+ */
+export function writeConsent(sessions, filePath = CONSENT_PATH) {
+  try {
+    const list = [...new Set(sessions)]
+      .filter(id => typeof id === 'string' && id.length > 0 && id.length <= 200)
+      .sort()
+      .slice(0, MAX_CONSENT_SESSIONS);
+    const temporary = `${filePath}.${process.pid}.${Date.now().toString(36)}.${Math.random().toString(36).slice(2, 8)}.tmp`;
+    const body = `${JSON.stringify({ version: CONSENT_VERSION, updatedAt: new Date().toISOString(), sessions: list }, null, 2)}\n`;
+    fs.writeFileSync(temporary, body, { encoding: 'utf8', mode: 0o600 });
+    try {
+      fs.chmodSync(temporary, 0o600);
+    } catch {
+      // Windows has no POSIX mode bits; the user profile ACL still applies.
+    }
+    fs.renameSync(temporary, filePath);
+    try {
+      fs.chmodSync(filePath, 0o600);
+    } catch {
+      // Best effort only.
+    }
+  } catch {
+    // Consent persistence is best effort; the in-memory state remains correct.
+  }
+}
 function scalar(value) {
   if (typeof value === 'boolean') return { boolValue: value };
   if (typeof value === 'number' && Number.isFinite(value)) return Number.isInteger(value) ? { intValue: String(value) } : { doubleValue: value };
@@ -202,10 +257,17 @@ export class VoluntaryCollector {
   #audit;
   #tasks = new Set();
   #disposed = false;
-  constructor({ config, transport = postOtlp, audit = () => {} }) {
+  #persisted;
+  #persistConsent;
+  constructor({ config, transport = postOtlp, audit = () => {}, restoredSessions = [], persistConsent = null }) {
     this.#config = config;
     this.#transport = transport;
     this.#audit = audit;
+    this.#persisted = new Set(Array.isArray(restoredSessions) ? restoredSessions : []);
+    this.#persistConsent = typeof persistConsent === 'function' ? persistConsent : null;
+  }
+  #saveConsent() {
+    try { this.#persistConsent?.([...this.#persisted]); } catch { /* persisted state is best effort */ }
   }
   #state(session) {
     const id = sid(session);
@@ -241,8 +303,10 @@ export class VoluntaryCollector {
     if (!sid(session)) return { kind: 'error', text: '无法确定当前会话，未开启上传。' };
     if (action === 'off-all') {
       for (const state of this.#states.values()) this.#revoke(state);
+      this.#persisted.clear();
+      this.#saveConsent();
       this.#audit({ event: 'off-all' });
-      return { kind: 'success', text: '已关闭所有会话的 Langfuse 上传，并清除尚未提交的缓存。' };
+      return { kind: 'success', text: '已关闭所有会话的 Langfuse 上传，清除尚未提交的缓存，并取消重启后的状态恢复。' };
     }
     const state = this.#state(session);
     if (action === 'on') {
@@ -258,19 +322,23 @@ export class VoluntaryCollector {
         state.history = this.#stageHistory(state, session);
         this.#audit({ event: 'history-staged', sessionId: state.id, fromSeq: state.fromSeq, turns: state.history.length });
       }
-      this.#audit({ event: 'on', sessionId: state.id, fromSeq: state.fromSeq, history: state.history.length });
+      this.#persisted.add(state.id);
+      this.#saveConsent();
+      this.#audit({ event: 'on', sessionId: state.id, fromSeq: state.fromSeq, history: state.history.length, persisted: true });
       if (historyFlag) {
         return {
           kind: 'success',
-          text: `已开启当前会话上传：${state.id}\n将在下一条消息开始时补传此前 ${state.history.length} 个历史轮次；补传内容同样无法撤回。\n工号：${this.#config.userId}`,
+          text: `已开启当前会话上传：${state.id}\n将在下一条消息开始时补传此前 ${state.history.length} 个历史轮次；补传内容同样无法撤回。\n已记住开启状态：DSH 重启后仍保持开启（只上传恢复后的新轮次）。\n工号：${this.#config.userId}`,
         };
       }
-      return { kind: 'success', text: `已开启当前会话上传：${state.id}\n仅上传此后新开始的轮次；历史内容与其他会话保持关闭。\n工号：${this.#config.userId}` };
+      return { kind: 'success', text: `已开启当前会话上传：${state.id}\n仅上传此后新开始的轮次；历史内容与其他会话保持关闭。\n已记住开启状态：DSH 重启后仍保持开启（只上传恢复后的新轮次）。\n工号：${this.#config.userId}` };
     }
     if (action === 'off') {
       this.#revoke(state);
-      this.#audit({ event: 'off', sessionId: state.id });
-      return { kind: 'success', text: `已关闭当前会话上传：${state.id}\n尚未提交的缓存已清除；已发送的数据无法撤回。` };
+      this.#persisted.delete(state.id);
+      this.#saveConsent();
+      this.#audit({ event: 'off', sessionId: state.id, persisted: false });
+      return { kind: 'success', text: `已关闭当前会话上传：${state.id}\n尚未提交的缓存已清除；已发送的数据无法撤回；重启后不会再自动恢复。` };
     }
     if (action !== 'status') return { kind: 'error', text: '用法：/lf on [--history] | /lf off | /lf status | /lf off-all' };
     const last = state.last ? `${state.last.at} ${state.last.ok ? '平台 HTTP 已接收' : '发送未完成：' + state.last.error}${state.last.traceId ? '；trace=' + state.last.traceId : ''}` : '尚无发送';
@@ -280,7 +348,8 @@ export class VoluntaryCollector {
       `历史补传：${state.history?.length ? '待补传 ' + state.history.length + ' 轮（下一条消息开始时上传）' : '无'}`,
       `本次进程已接收确认：${state.sent} 轮；失败：${state.failed} 轮`,
       `待完成轮次：${state.turns.size}；发送中：${state.requests.size}`,
-      `最近结果：${last}`, '其他会话独立控制；DSH 重启后全部恢复关闭。',
+      `最近结果：${last}`, `重启后保持：${state.enabled ? '开（已记住）' : '关'}`,
+      '其他会话独立控制；已记住的会话在 DSH 重启后恢复开启，只上传恢复后的新轮次。',
     ].join('\n') };
   }
   #stageHistory(state, session) {
@@ -359,7 +428,27 @@ export class VoluntaryCollector {
   handle(session, event) {
     if (this.#disposed) return;
     const id = sid(session);
-    const state = id ? this.#states.get(id) : null;
+    let state = id ? this.#states.get(id) : null;
+    if (state && state.session !== session) {
+      this.#revoke(state);
+      this.#states.delete(id);
+      state = null;
+    }
+    // Restore a remembered session on its first event after a reload/restart.
+    // The consent file only stores ids, and restore pins fromSeq to this event
+    // so a turn that started before the restore is never uploaded.
+    if (!state && id && this.#persisted.has(id)) {
+      state = this.#state(session);
+      const fromSeq = Number.isSafeInteger(event?.seq) ? event.seq : session.seq;
+      if (Number.isSafeInteger(fromSeq) && fromSeq >= 0) {
+        state.enabled = true;
+        state.epoch = crypto.randomUUID();
+        state.fromSeq = fromSeq;
+        state.turns.clear(); state.pendingUser = ''; state.history = [];
+        state.restoredAt = new Date().toISOString();
+        this.#audit({ event: 'restored', sessionId: id, fromSeq });
+      }
+    }
     // This check precedes reading event.data, resolving cwd, or buffering text.
     if (!state?.enabled || state.session !== session) return;
     if (!Number.isSafeInteger(event?.seq) || event.seq < state.fromSeq) return;
@@ -448,9 +537,16 @@ export class VoluntaryCollector {
   async drain() { await Promise.allSettled([...this.#tasks]); }
   dispose() { this.#disposed = true; for (const state of this.#states.values()) this.#revoke(state); }
   diagnostics() {
+    const sessions = [...this.#states.values()].map(state => ({ id: state.id, enabled: state.enabled, fromSeq: state.fromSeq, sent: state.sent, failed: state.failed, historyStaged: state.history?.length ?? 0, last: state.last }));
+    // Remembered sessions without live state are already "on" for the UI; the
+    // uploader restores them on their first event after the reload.
+    for (const id of this.#persisted) {
+      if (this.#states.has(id)) continue;
+      sessions.push({ id, enabled: true, persisted: true, restorePending: true, fromSeq: 0, sent: 0, failed: 0, historyStaged: 0, last: null });
+    }
     return { version: VERSION, defaultUpload: false, ready: !!this.#config,
       endpoint: this.#config?.baseUrl, userId: this.#config?.userId,
-      sessions: [...this.#states.values()].map(state => ({ id: state.id, enabled: state.enabled, fromSeq: state.fromSeq, sent: state.sent, failed: state.failed, historyStaged: state.history?.length ?? 0, last: state.last })) };
+      persisted: [...this.#persisted], sessions };
   }
 }
 
@@ -470,7 +566,12 @@ export function apply(ctx) {
   const audit = value => {
     try { fs.appendFileSync(logPath, JSON.stringify({ at: new Date().toISOString(), ...value }) + '\n', 'utf8'); } catch { /* metadata-only log is best effort */ }
   };
-  const controller = new VoluntaryCollector({ config: loadConfig(), audit });
+  const controller = new VoluntaryCollector({
+    config: loadConfig(),
+    audit,
+    restoredSessions: readConsent(),
+    persistConsent: sessions => writeConsent(sessions),
+  });
   const diagnostic = { controller, context: ctx, version: VERSION };
   globalThis[DIAGNOSTIC] = diagnostic;
   ctx.on('session/event', (session, event) => controller.handle(session, event));
@@ -486,7 +587,7 @@ export function apply(ctx) {
       handler: invocation => controller.command(invocation),
     });
   }, 'langfuse voluntary controls');
-  audit({ event: 'loaded', version: VERSION, ready: controller.diagnostics().ready, defaultUpload: false });
+  audit({ event: 'loaded', version: VERSION, ready: controller.diagnostics().ready, defaultUpload: false, persisted: controller.diagnostics().persisted?.length ?? 0 });
 }
 
 export default { name, inject, apply };

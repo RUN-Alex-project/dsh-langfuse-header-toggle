@@ -27,7 +27,7 @@ import {
 } from '../index.js';
 
 const UPLOADER_PATH = process.env.DSH_LANGFUSE_UPLOADER
-  || path.join(os.homedir(), '.dsh', 'langfuse-voluntary', 'dsh-langfuse-voluntary-1.0.2.mjs');
+  || path.join(os.homedir(), '.dsh', 'langfuse-voluntary', 'dsh-langfuse-voluntary-1.0.3.mjs');
 
 /** Build a session object shaped like the Host Session used by the uploader. */
 function session(id, seq = 10) {
@@ -159,7 +159,7 @@ test('Host plugin registers five authenticated /api routes and removes them on u
     const sessions = new Map([['s1', session('s1')]]);
     const routes = [];
     const effects = [];
-    const hooks = [{ id: 'include:dsh-langfuse-voluntary-1-0-1', options: { name: 'file:///tmp/dsh-langfuse-voluntary-1.0.2.mjs' }, fiber: {}, disabled: false }];
+    const hooks = [{ id: 'include:dsh-langfuse-voluntary-1-0-1', options: { name: 'file:///tmp/dsh-langfuse-voluntary-1.0.3.mjs' }, fiber: {}, disabled: false }];
     const ctx = {
       get(name) {
         if (name === 'sessions') return { get: id => sessions.get(id) };
@@ -246,7 +246,7 @@ test('Host plugin registers five authenticated /api routes and removes them on u
 });
 
 // ---------------------------------------------------------------------------
-// Real uploader integration (read-only import of the installed 1.0.2 module)
+// Real uploader integration (read-only import of the installed 1.0.3 module)
 // ---------------------------------------------------------------------------
 
 const uploaderAvailable = fs.existsSync(UPLOADER_PATH);
@@ -273,7 +273,7 @@ function event(type, seq, turn, data = {}) {
 test('real uploader: bridge drives its consent state and only uploads later turns', uploaderTest, async () => {
   const module = await import(pathToFileURL(UPLOADER_PATH).href);
   assert.equal(typeof module.VoluntaryCollector, 'function');
-  assert.equal(module.VERSION, '1.0.2');
+  assert.equal(module.VERSION, '1.0.3');
 
   const recorder = recordingTransport();
   const collector = new module.VoluntaryCollector({
