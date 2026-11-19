@@ -14,7 +14,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const UPLOADER_PATH = process.env.LANGFUSE_UPLOADER_PATH
-  || path.join(os.homedir(), '.dsh', 'langfuse-voluntary', 'dsh-langfuse-voluntary-1.0.3.mjs');
+  || path.join(os.homedir(), '.dsh', 'langfuse-voluntary', 'dsh-langfuse-voluntary-2.0.0.mjs');
 const uploaderAvailable = fs.existsSync(UPLOADER_PATH);
 const uploaderTest = { skip: uploaderAvailable ? false : `uploader not found at ${UPLOADER_PATH}` };
 

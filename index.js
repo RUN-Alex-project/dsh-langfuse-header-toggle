@@ -52,7 +52,7 @@ export const name = 'dsh-langfuse-header-toggle';
 export const VERSION = '1.2.0';
 
 /** Uploader version this bundle vendors for migration. */
-export const VENDORED_UPLOADER_VERSION = '1.0.3';
+export const VENDORED_UPLOADER_VERSION = '2.0.0';
 
 /** Loader row id used for the managed voluntary uploader entry. */
 export const VOLUNTARY_ROW_ID = 'dsh-langfuse-voluntary-1-0-1';

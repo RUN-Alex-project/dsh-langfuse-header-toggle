@@ -19,7 +19,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const UPLOADER_PATH = process.env.LANGFUSE_UPLOADER_PATH
-  || path.join(os.homedir(), '.dsh', 'langfuse-voluntary', 'dsh-langfuse-voluntary-1.0.3.mjs');
+  || path.join(os.homedir(), '.dsh', 'langfuse-voluntary', 'dsh-langfuse-voluntary-2.0.0.mjs');
 const uploaderAvailable = fs.existsSync(UPLOADER_PATH);
 const uploaderTest = { skip: uploaderAvailable ? false : `uploader not found at ${UPLOADER_PATH}` };
 
@@ -200,7 +200,7 @@ test('uploader: /lf on --history stages older turns and flushes them on the next
         output: observation(span, 'langfuse.observation.output')?.content,
       };
     }).sort((left, right) => left.turn - right.turn);
-    assert.deepEqual(turns.map(item => item.turn), [1, 2, 3]);
+    assert.deepEqual(turns.map(item => Number(item.turn)), [1, 2, 3]);
     assert.equal(turns[0].input, '历史问题一');
     assert.equal(turns[0].output, '历史回答一');
     assert.equal(turns[1].input, '历史问题二');
@@ -260,7 +260,7 @@ test('uploader: /lf on without --history still uploads only new turns', uploader
 
     assert.equal(sink.requests.length, 1);
     const span = rootSpan(sink.requests[0]);
-    assert.equal(JSON.parse(spanAttribute(span, 'langfuse.trace.metadata.turn_number')), 3);
+    assert.equal(Number(JSON.parse(spanAttribute(span, 'langfuse.trace.metadata.turn_number'))), 3);
     assert.equal(observation(span, 'langfuse.observation.input')?.content, '只看新轮次');
 
     const audit = fs.readFileSync(path.join(dir, 'control-events.jsonl'), 'utf8');
